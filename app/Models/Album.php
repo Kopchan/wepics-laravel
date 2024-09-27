@@ -46,32 +46,6 @@ class Album extends Model
     /**
      * Проверка пользователя на доступ к альбому
      */
-    public function hasAccess(User $user = null): bool {
-        // Проверка админ ли пользователь
-        //if ($user?->is_admin)
-        //    return true;
-
-        // Проверка есть ли доступ гостю
-        $right = AccessRight
-            ::where('user_id' , null)
-            ->where('album_id', $this->id)
-            ->first();
-        if ($right?->allowed)
-            return true;
-
-        if ($user) {
-            // Проверка есть ли доступ пользователю
-            $right = AccessRight
-                ::where('user_id' , $user->id)
-                ->where('album_id', $this->id)
-                ->first();
-            if ($right?->allowed)
-                return true;
-        }
-        // TODO: Сделать восходящую (к род. альбомам) проверку доступа, если не было запретов
-
-        return false;
-    }
 
     public function hasAccessCached(User $user = null) {
         if ($user?->is_admin) return true;
@@ -145,7 +119,32 @@ class Album extends Model
 
         return false;
     }
+    /*
+    public function hasAccess(User $user = null): bool {
+        // Проверка админ ли пользователь
+        //if ($user?->is_admin)
+        //    return true;
 
+        // Проверка есть ли доступ гостю
+        $right = AccessRight
+            ::where('user_id' , null)
+            ->where('album_id', $this->id)
+            ->first();
+        if ($right?->allowed)
+            return true;
+
+        if ($user) {
+            // Проверка есть ли доступ пользователю
+            $right = AccessRight
+                ::where('user_id' , $user->id)
+                ->where('album_id', $this->id)
+                ->first();
+            if ($right?->allowed)
+                return true;
+        }
+
+        return false;
+    }
     public static function hasAccessFastOldByHash(string $hash, int $userId = null) {
         $res = DB
             ::table('access_rights')
@@ -159,7 +158,7 @@ class Album extends Model
             if ($res->allowed !== null) return $res->allowed;
             if ($res->path === '/')     return false;
         }
-        return Album::hasAccessFastById($res->parent_album_id, $userId);
+        return Album::hasAccessFastOldByHash($res->parent_album_id, $userId);
     }
 
     public static function hasAccessFastOldById(int $albumId, int $userId = null): bool {
@@ -180,9 +179,9 @@ class Album extends Model
             if ($res->allowed !== null) return $res->allowed;
             if ($res->path === '/')     return false;
         }
-        return Album::hasAccessFastById($res->parent_album_id, $userId);
+        return Album::hasAccessFastOldById($res->parent_album_id, $userId);
     }
-
+    */
     // Связи
     public function images() {
         return $this->hasMany(Image::class);

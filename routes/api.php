@@ -69,8 +69,9 @@ Route
         $albumImages->prefix('{image_hash}')->group(function ($image) {
             $image->middleware('token.auth:admin')->delete('', 'delete');
             $image->middleware('token.auth:admin')->patch ('', 'rename');
-            $image->get('',     'show');
-            $image->get('orig', 'orig');
+            $image->get('',         'info');
+            $image->get('orig',     'orig');
+            $image->any('download', 'download');
             $image->get('thumb/{orient}{px}', 'thumb')
                 ->where('orient', '[whWH]')
                 ->where('px'    , '[0-9]+')

@@ -39,6 +39,9 @@ class Image extends Model
     public function album() {
         return $this->belongsTo(Album::class);
     }
+    public function duplicas() {
+        return $this->hasMany(ImageDuplica::class);
+    }
     public function reactions() {
         return $this->belongsToMany(Reaction::class, 'reaction_images');
     }

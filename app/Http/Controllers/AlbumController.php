@@ -9,6 +9,8 @@ use App\Models\Album;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use League\Flysystem\Local\LocalFilesystemAdapter;
+use League\Flysystem\Filesystem;
 
 class AlbumController extends Controller
 {
@@ -16,8 +18,10 @@ class AlbumController extends Controller
     {
         // TODO: Перейти на свою индексацию через glob для быстрой и одновременной индексации картинок и папок (мб всех файлов)
         // Получение пути к альбому и его папок
-        $localPath = "images$album->path";
-        $folders = Storage::directories($localPath);
+        $localPath = Storage::path("images$album->path");
+      //$folders = array_filter(glob("$localPath*", GLOB_MARK), fn ($path) => in_array($path[-1], ['/', '\\']));
+      //$folders = Storage::directories($localPath);
+        $folders = File::directories($localPath);
         $childrenInDB = $album->childAlbums->toArray();
 
         // Проход по папкам альбома для ответа (дочерние альбомы)
@@ -43,7 +47,7 @@ class AlbumController extends Controller
             $children[] = $childAlbum;
         }
         // Удаление оставшихся альбомов в БД
-        Album::destroy(array_column($childrenInDB, 'id'));
+        //Album::destroy(array_column($childrenInDB, 'id')); // FIXME: опасное удаление, надо спрашивать админа "куда делся тот-та альбом?"
 
         $album->last_indexation = now();
         $album->save();

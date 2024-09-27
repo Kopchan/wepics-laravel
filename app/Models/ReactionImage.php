@@ -14,12 +14,12 @@ class ReactionImage extends Model
 
     // Связи
     public function image() {
-        return $this->belongsToMany(Image::class);
+        return $this->belongsTo(Image::class);
     }
     public function user() {
-        return $this->belongsToMany(User::class);
+        return $this->belongsTo(User::class);
     }
     public function reaction() {
-        return $this->belongsToMany(Reaction::class);
+        return $this->belongsTo(Reaction::class);
     }
 }
