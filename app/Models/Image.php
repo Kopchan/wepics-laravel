@@ -43,7 +43,9 @@ class Image extends Model
         return $this->hasMany(ImageDuplica::class);
     }
     public function reactions() {
-        return $this->belongsToMany(Reaction::class, 'reaction_images');
+        return $this->belongsToMany(Reaction::class, ReactionImage::class)
+            ->withPivot('user_id')
+            ->using(ReactionImage::class);
     }
     public function tags() {
         return $this->belongsToMany(Tag::class, 'tag_image');

@@ -4,11 +4,10 @@ namespace App\Settings;
 
 use Spatie\LaravelSettings\Settings;
 
-class SettingName extends Settings
+class GeneralSettings extends Settings
 {
-
     public static function group(): string
     {
-        return 'groupName';
+        return 'general';
     }
 }

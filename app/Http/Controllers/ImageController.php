@@ -91,8 +91,8 @@ class ImageController extends Controller
                 if (!in_array($extension, $allowedExtensions))
                     continue;
 
-                // Получение хеша картинки (прожорливое)
-                $hash = md5(File::get($file));
+                // Получение хеша картинки (прожорливое к скорости чтения)
+                $hash = hash('xxh3', File::get($file));
 
                 // Проверка наличия в БД картинки по хешу, если есть — проверяем в ФС
                 $key = array_search($hash, $imagesHashes);
@@ -146,6 +146,9 @@ class ImageController extends Controller
                 $imagesHashes[] = $hash;
             }
             catch (\Exception $ex) {
+                if ($ex instanceof ApiDebugException)
+                    throw $ex;
+
                 $errors[] = $ex;
             }
         }
@@ -182,7 +185,7 @@ class ImageController extends Controller
             }
 
             // Проверка существования того же файла
-            $imageHash = md5(File::get($file->getRealPath()));
+            $imageHash = hash('xxh3', File::get($file->getRealPath()));
 
             $image = Image
                 ::where('album_id', $album->id)
@@ -193,7 +196,7 @@ class ImageController extends Controller
                 // Сохранение плохого ответа API
                 $responses['errored'][] = [
                     'name'    => $fileName,
-                    'message' => "Image with md5 hash \"$imageHash\" already exist in this album",
+                    'message' => "Image with this hash \"$imageHash\" already exist in this album",
                 ];
                 continue;
             }
@@ -250,13 +253,13 @@ class ImageController extends Controller
         $sortType = $request->sort ?? $allowedSorts[0];
 
         $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
-        $naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
+      //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
+        $naturalSort = "name $sortDirection";
         $orderByRaw = match ($sortType) {
             'name'  =>                                "$naturalSort",
             'ratio' => "width / height $sortDirection, $naturalSort",
             default =>      "$sortType $sortDirection, $naturalSort",
         };
-
         $limit = intval($request->limit);
         if (!$limit)
             $limit = 30;
@@ -264,15 +267,16 @@ class ImageController extends Controller
         if (!$searchedTags)
             $imagesFromDB = Image
                 ::where('album_id', $album->id)
+                ->with('tags', 'reactions')
                 ->orderByRaw($orderByRaw)
                 ->paginate($limit);
         else
             $imagesFromDB = Image
                 ::where('album_id', $album->id)
+                ->with('tags', 'reactions')
                 ->orderByRaw($orderByRaw)
                 ->withAllTags($searchedTags)
                 ->paginate($limit);
-
 
         $response = [
             'page'     => $imagesFromDB->currentPage(),

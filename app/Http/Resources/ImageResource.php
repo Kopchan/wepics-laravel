@@ -11,23 +11,8 @@ class ImageResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $userId = $request?->user()?->id;
-        $reactions = ReactionImage
-            ::join('reactions', 'reactions.id', '=', 'reaction_id')
-            ->select(
-                'value',
-                DB::raw('COUNT(*) AS count'),
-                DB::raw('COUNT(CASE user_id WHEN '
-                    .($userId ? $userId : 'NULL')
-                    .' THEN 1 ELSE null END) AS isYouSet')
-            )
-            ->groupBy('value')
-            ->where('image_id', $this->id)
-            ->orderBy('count', 'DESC')
-            ->get()
-            ->toArray();
-
-        $response = [
+        $userId = $request->user()?->id;
+        return [
 //          'id'        => $this->id,
             'name'      => $this->name,
             'hash'      => $this->hash,
@@ -35,22 +20,23 @@ class ImageResource extends JsonResource
             'size'      => $this->size,
             'width'     => $this->width,
             'height'    => $this->height,
-//          'album_id'  => $this->album_id,
+            'tags'      => $this->whenLoaded('tags', fn() =>
+                $this->when($this->tags->isNotEmpty(), fn () => TagResource::collection($this->tags))
+            ),
+            'reactions' => $this->whenLoaded('reactions', fn() => $this->when($this->reactions->isNotEmpty(),
+                fn () => $this->reactions->groupBy('value')->map(function ($group) use ($userId) {
+                    $reactionParams = [];
+                    $reactionParams['count']  = $group->count();
+
+                    $youSet = $group->contains(fn ($reaction) =>
+                        isset($userId) && $reaction->pivot?->user_id === $userId
+                    );
+                    if ($youSet)
+                        $reactionParams['isYouSet'] = true;
+
+                    return $reactionParams;
+                })
+            )),
         ];
-        $tags = $this->tags;
-        if (count($tags))
-            $response['tags'] = TagResource::collection($tags);
-
-        if ($reactions) {
-            foreach ($reactions as $reaction) {
-                $reactionsResponse[$reaction['value']]['count'] = $reaction['count'];
-
-                if ($reaction['isYouSet'])
-                    $reactionsResponse[$reaction['value']]['isYouSet'] = true;
-            }
-            $response['reactions'] = $reactionsResponse;
-        }
-
-        return $response;
     }
 }

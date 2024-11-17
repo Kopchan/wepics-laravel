@@ -18,7 +18,7 @@ class AccessController extends Controller
         if (count($rights) < 1)
             return response(['message' => 'Nobody has rights to this album']);
 
-        $allowed   = [];
+        $allowed    = [];
         $disallowed = [];
         $isGuestAllowed = null;
         foreach ($rights as $right) {
@@ -28,11 +28,11 @@ class AccessController extends Controller
             }
 
             if ($right->allowed) $allowed[] = [
-                'user_id' => $right->user_id,
+                'user_id'  => $right->user_id,
                 'nickname' => $right->user->nickname
             ];
             else $disallowed[] = [
-                'user_id' => $right->user_id,
+                'user_id'  => $right->user_id,
                 'nickname' => $right->user->nickname
             ];
         }

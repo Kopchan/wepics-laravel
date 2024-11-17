@@ -9,7 +9,7 @@ class AccessRightRequest extends ApiRequest
     public function rules(): array
     {
         return [
-            'user_id' => 'int|exists:users,id',
+            'user_id' => 'nullable|int|exists:users,id',
             'allow'   => 'boolean',
         ];
     }
