@@ -7,7 +7,7 @@ use App\Enums\SortTypesEnum;
 use App\Exceptions\ApiDebugException;
 use App\Exceptions\ApiException;
 use App\Http\Requests\AlbumImagesRequest;
-use App\Http\Requests\FilenameCheckRequest;
+use App\Http\Requests\AlbumCreateRequest;
 use App\Http\Requests\UploadRequest;
 use App\Http\Resources\ImageResource;
 use App\Models\Album;
@@ -92,7 +92,7 @@ class ImageController extends Controller
                     continue;
 
                 // Получение хеша картинки (прожорливое к скорости чтения)
-                $hash = hash('xxh3', File::get($file));
+                $hash = hash_file('xxh3', $file);
 
                 // Проверка наличия в БД картинки по хешу, если есть — проверяем в ФС
                 $key = array_search($hash, $imagesHashes);
@@ -185,7 +185,7 @@ class ImageController extends Controller
             }
 
             // Проверка существования того же файла
-            $imageHash = hash('xxh3', File::get($file->getRealPath()));
+            $imageHash = hash_file('xxh3', $file);
 
             $image = Image
                 ::where('album_id', $album->id)
@@ -241,7 +241,7 @@ class ImageController extends Controller
         $cacheKey = "albumIndexing:hash=$albumHash";
         if (!Cache::get($cacheKey)) {
             ImageController::indexingImages($album);
-            Cache::put($cacheKey, true, 600);
+            Cache::put($cacheKey, true, 43200);
         };
 
         $searchedTags = null;
@@ -253,8 +253,8 @@ class ImageController extends Controller
         $sortType = $request->sort ?? $allowedSorts[0];
 
         $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
-      //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
-        $naturalSort = "name $sortDirection";
+        $naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
+      //$naturalSort = "name $sortDirection";
         $orderByRaw = match ($sortType) {
             'name'  =>                                "$naturalSort",
             'ratio' => "width / height $sortDirection, $naturalSort",
@@ -289,6 +289,7 @@ class ImageController extends Controller
 
         return response($response);
     }
+
     public function getSign(User $user, $albumHash): string {
         $cacheKey = "signAccess:to=$albumHash;for=$user->id";
         $cachedSign = Cache::get($cacheKey);
@@ -331,6 +332,7 @@ class ImageController extends Controller
 
         return $allow;
     }
+
     public function thumb($albumHash, $imageHash, $orientation, $size)
     {
         // TODO: обрабатывать запрос на превью бОльшего размера, чем оригинала
@@ -372,9 +374,9 @@ class ImageController extends Controller
                 // Создание превью
                 $image = $image ?? Image::getByHash($albumHash, $imageHash);
 
-                $imagePath = 'images'. $image->album->path . $image->name;
+                $imagePath = Storage::path('images'. $image->album->path . $image->name);
 
-                $thumb = Intervention::read(Storage::get($imagePath));
+                $thumb = Intervention::read($imagePath);
 
                 if ($orientation == 'w')
                     $thumb->scale(width: $size);
@@ -438,7 +440,7 @@ class ImageController extends Controller
         return response()->download($path, $image->name);
     }
 
-    public function rename(FilenameCheckRequest $request, $albumHash, $imageHash)
+    public function rename(AlbumCreateRequest $request, $albumHash, $imageHash)
     {
         $image = Image::getByHash($albumHash, $imageHash);
         $imageExt = pathinfo($image->name, PATHINFO_EXTENSION);

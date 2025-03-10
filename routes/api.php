@@ -64,7 +64,7 @@ Route
     ->controller(ImageController::class)
     ->prefix('images')
     ->group(function ($albumImages) {
-        $albumImages->get('', 'showAll');
+        $albumImages->get('', 'showAll')->withoutMiddleware("throttle:api");
         $albumImages->middleware('token.auth:admin')->post('', 'upload');
         $albumImages->prefix('{image_hash}')->group(function ($image) {
             $image->middleware('token.auth:admin')->delete('', 'delete');

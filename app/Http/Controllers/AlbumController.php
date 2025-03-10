@@ -2,15 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\ApiDebugException;
 use App\Exceptions\ApiException;
-use App\Http\Requests\FilenameCheckRequest;
+use App\Http\Requests\AlbumCreateRequest;
+use App\Http\Requests\AlbumEditRequest;
 use App\Models\Album;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use League\Flysystem\Local\LocalFilesystemAdapter;
-use League\Flysystem\Filesystem;
 
 class AlbumController extends Controller
 {
@@ -126,7 +124,7 @@ class AlbumController extends Controller
         return response($response);
     }
 
-    public function create(FilenameCheckRequest $request, $hash)
+    public function create(AlbumCreateRequest $request, $hash)
     {
         $parentAlbum = Album::getByHash($hash);
         $newFolderName = $request->name;
@@ -135,32 +133,40 @@ class AlbumController extends Controller
         if (Storage::exists($path))
             throw new ApiException(409, 'Album with this name already exist');
 
+        $name = $request->customName ?? basename($path);
+
         Storage::createDirectory($path);
         $newAlbum = Album::create([
-            'name' => basename($path),
-            'path' => "$parentAlbum->path$newFolderName/",
+            'name' => $name,
+            'path' => $path,
             'hash' => Str::random(25),
             'parent_album_id' => $parentAlbum->id
         ]);
         return response($newAlbum);
     }
 
-    public function rename(FilenameCheckRequest $request, $hash)
+    public function rename(AlbumEditRequest $request, $hash)
     {
         $album = Album::getByHash($hash);
+        $oldCustomName = (basename($album->path) != $album->name)
+            ? $album->name
+            : null;
+
         $newFolderName = $request->name;
+        if ($newFolderName !== null && $newFolderName !== '') {
+            $oldLocalPath = "images$album->path";
+            $newPath = dirname($album->path) .'/'. $newFolderName .'/';
+            $newLocalPath = "images$newPath";
+            if (Storage::exists($newPath))
+                throw new ApiException(409, 'Album with this name already exist');
 
-        $oldLocalPath = "images$album->path";
-        $newPath = dirname($album->path) .'/'. $newFolderName .'/';
-        $newLocalPath = "images$newPath";
-        if (Storage::exists($newPath))
-            throw new ApiException(409, 'Album with this name already exist');
+            Storage::move($oldLocalPath, $newLocalPath);
+            $album->path = $newPath;
+        }
 
-        Storage::move($oldLocalPath, $newLocalPath);
-        $album->update([
-            'name' => basename($newPath),
-            'path' => "$newPath",
-        ]);
+        $album->name = $request->customName ?? $oldCustomName ?? $request->name ?? $album->name;
+
+        $album->save();
         return response(null, 204);
     }
 

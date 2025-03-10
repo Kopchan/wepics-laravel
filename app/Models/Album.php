@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Exceptions\ApiDebugException;
 use App\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;

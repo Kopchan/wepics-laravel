@@ -12,49 +12,66 @@ class LogRequest
 {
     public function handle(Request $request, Closure $next)
     {
-        $method = strtoupper($request->getMethod());
-        if (in_array($method, ['GET', 'PUT', 'PATCH', 'POST', 'DELETE']))
-            DB::enableQueryLog();
-
+        try {
+            $method = strtoupper($request->getMethod());
+            if (in_array($method, ['GET', 'PUT', 'PATCH', 'POST', 'DELETE']))
+                DB::enableQueryLog();
+        }
+        catch (\Exception $e) {
+            Log::error($e);
+        }
         return $next($request);
     }
 
     public function terminate(Request $request, $response)
     {
-        $method = strtoupper($request->getMethod());
-        if (!in_array($method, ['GET', 'PUT', 'PATCH', 'POST', 'DELETE']))
-            return;
+        try {
+            $method = strtoupper($request->getMethod());
+            if (!in_array($method, ['GET', 'PUT', 'PATCH', 'POST', 'DELETE']))
+                return;
 
-        $dbQueries = collect(DB::getQueryLog());
-        $dbQueryStrings = [];
-        foreach ($dbQueries as $dbQuery) $dbQueryStrings[] =
-            str_replace('?', $dbQuery['bindings'][0] ?? '?', $dbQuery['query']) . ";\n";
+            $dbQueries = DB::getQueryLog();
+            $dbQueryStrings = [];
+            foreach ($dbQueries as $dbQuery) {
+                $query = $dbQuery['query'];
+                $bindings = $dbQuery['bindings'];
 
-        $code = $response->getStatusCode();
-        $sign = $response->isSuccessful() ? "🟢" : "🔴";
+                // Заменяем вопросительные знаки на значения параметров
+                foreach ($bindings as $binding)
+                    $query = preg_replace('/\?/', "'" . addslashes($binding) . "'", $query, 1);
 
-        $uri    = $request->getPathInfo();
-        $origin = $request->headers->get('origin') ?? "NO_ORIGIN";
-        $userId = $request->user()?->id ??
-            ($request->has('sign')
-                ? explode('_', $request->sign)[0]
-                : "GUEST  ");
+                $dbQueryStrings[] = $query . ";\n";
+            }
 
-        if (is_numeric($userId))
-            $userId = str_pad($userId, 7, '0', STR_PAD_LEFT);
+            $code = $response->getStatusCode();
+            $sign = $response->isSuccessful() ? "🟢" : "🔴";
 
-        $agent = new Agent();
-        $agent->setUserAgent($request->headers->get('User-Agent'));
-        $device   = str_pad($agent->device()  , 10);
-        $platform = str_pad($agent->platform(), 10);
-        $browser  = str_pad($agent->browser() , 10);
+            $uri    = $request->getPathInfo();
+            $origin = $request->headers->get('origin') ?? "NO_ORIGIN";
+            $userId = $request->user()?->id ??
+                ($request->has('sign')
+                    ? explode('_', $request->sign)[0]
+                    : "GUEST  ");
 
-        $reqQuery = $request->getQueryString();
-        $message = "$sign $code $method\t👤$userId 📱$device 📦$platform 🌍$browser $origin $uri"
-            . ($reqQuery ? "?$reqQuery" : '')
-            . (!empty($dbQueryStrings) ? "\n" : '')
-            . implode('', $dbQueryStrings);
+            if (is_numeric($userId))
+                $userId = str_pad($userId, 7, '0', STR_PAD_LEFT);
 
-        Log::channel('http-request')->log('info', $message);
+            $agent = new Agent();
+            $agent->setUserAgent($request->headers->get('User-Agent'));
+            $device   = str_pad($agent->device()  , 10);
+            $platform = str_pad($agent->platform(), 10);
+            $browser  = str_pad($agent->browser() , 10);
+
+            $reqQuery = $request->getQueryString();
+            $message = "$sign $code $method\t👤$userId 📱$device 📦$platform 🌍$browser $origin $uri"
+                . ($reqQuery ? "?$reqQuery" : '')
+                . (!empty($dbQueryStrings) ? "\n" : '')
+                . implode('', $dbQueryStrings);
+
+            Log::channel('http-request')->log('info', $message);
+        }
+        catch (\Exception $exception) {
+            Log::error($exception);
+        }
     }
 }
