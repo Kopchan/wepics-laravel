@@ -14,8 +14,11 @@ class ImageLinkResource extends JsonResource
 //          'id'         => $this->id,
             'name'       => $this->name,
             'hash'       => $this->hash,
-            'album_hash' => $this->when($this->album_hash != null, $this->album_hash),
-            'sign'       => $this->when($this->sign != null, $this->sign),
+            'album'      => $this->when($this->album, fn () => [
+                'hash'   => $this->when($this->album?->hash, $this->album?->hash),
+                'name'   => $this->when($this->album?->name, $this->album?->name),
+                'sign'   => $this->when($this->album?->sign != null, $this->album?->sign),
+            ]),
             'date'       => $this->date,
             'size'       => $this->size,
             'width'      => $this->width,

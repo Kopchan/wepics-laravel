@@ -304,12 +304,15 @@ class ImageController extends Controller
         if ($isNested)
             foreach ($imagesFromDB as $image) {
                 $currentImageAlbum = $descendants?->where('id', $image->album_id)->first();
+                $albumInfo = [];
+                if ($currentImageAlbum) {
+                    $albumInfo['hash'] = $currentImageAlbum->hash;
+                    $albumInfo['name'] = $currentImageAlbum->name;
+                }
+                if ($currentImageAlbum?->sign)
+                    $albumInfo['sign'] = $currentImageAlbum->sign;
 
-                if (!$currentImageAlbum) continue;
-                $image->album_hash = $currentImageAlbum->hash;
-
-                if (!$currentImageAlbum->sign) continue;
-                $image->sign = $currentImageAlbum->sign;
+                $image->image = $albumInfo;
             }
 
         $response = [
@@ -321,8 +324,10 @@ class ImageController extends Controller
                 : ImageLinkResource::collection($imagesFromDB->items()),
         ];
 
-        if ($user && $accessLevel != AccessLevel::AsGuest)
+        if (!$album->guest_allow && $user && $accessLevel != AccessLevel::AsGuest)
             $response['sign'] = $album->getSign($user);
+
+        //dd($user, $accessLevel, $accessLevel != AccessLevel::AsGuest, $response, $imagesFromDB->toArray());
 
         return response($response);
     }
