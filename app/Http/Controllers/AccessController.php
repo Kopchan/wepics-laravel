@@ -14,19 +14,13 @@ class AccessController extends Controller
     {
         $album = Album::getByHash($hash);
 
-        $rights = $album->accessRights;
-        if (count($rights) < 1)
-            return response(['message' => 'Nobody has rights to this album']);
+        $rights = $album->accessRights()->with('user')->get();
+        //if (count($rights) < 1)
+        //    return response(['message' => 'Nobody has rights to this album']);
 
         $allowed    = [];
         $disallowed = [];
-        $isGuestAllowed = null;
         foreach ($rights as $right) {
-            if ($right->user_id === null) {
-                $isGuestAllowed = (bool)$right->allowed;
-                continue;
-            }
-
             if ($right->allowed) $allowed[] = [
                 'user_id'  => $right->user_id,
                 'nickname' => $right->user->nickname
@@ -37,33 +31,32 @@ class AccessController extends Controller
             ];
         }
         $response = [];
-        if ($isGuestAllowed !== null)
-                         $response['isGuestAllowed'] = $isGuestAllowed;
+                         $response['isGuestAllowed'] = $album->guest_allow;
         if ($allowed)    $response['listAllowed'   ] = $allowed;
         if ($disallowed) $response['listDisallowed'] = $disallowed;
-
         return response($response);
     }
+
     public function create(AccessRightRequest $request, $hash)
     {
         $album = Album::getByHash($hash);
 
-        $right = AccessRight
-            ::where('album_id', $album->id)
-            ->where('user_id' , $request->user_id)
-            ->first();
-        if ($right)
-            throw new ApiException(404, 'Right already exist');
+        if ($request->user_id === null)
+            $album->update(['guest_allow' => $request->allow]);
+
+        else
+            AccessRight::updateOrCreate([
+                'album_id' => $album->id,
+                'user_id' => $request->user_id,
+            ], [
+                'allowed'  => $request->allow,
+            ]);
 
         Cache::flush(); // FIXME: костыль
-        AccessRight::create([
-            'album_id' => $album->id,
-            'user_id'  => $request->user_id,
-            'allowed'  => $request->allow,
-        ]);
 
         return response(null, 204);
     }
+
     public function delete(AccessRightRequest $request, $hash)
     {
         $album = Album::getByHash($hash);

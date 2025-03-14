@@ -2,7 +2,7 @@
 
 namespace App\Enums;
 
-enum SortTypesEnum: string {
+enum SortType: string {
     case NAME   = 'name';
     case DATE   = 'date';
     case SIZE   = 'size';

@@ -2,10 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AccessLevel;
+use App\Enums\SortType;
 use App\Exceptions\ApiException;
 use App\Http\Requests\AlbumCreateRequest;
 use App\Http\Requests\AlbumEditRequest;
+use App\Http\Requests\AlbumRequest;
+use App\Http\Resources\ImageResource;
 use App\Models\Album;
+use App\Models\Image;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -58,7 +64,7 @@ class AlbumController extends Controller
 
         // Получение альбома из БД и проверка доступа пользователю
         $targetAlbum = Album::getByHash($hash);
-        if (!$targetAlbum->hasAccessCached($user))
+        if ($targetAlbum->getAccessLevelCached($user) == AccessLevel::None)
             throw new ApiException(403, 'Forbidden for you');
 
         AlbumController::indexingAlbumChildren($targetAlbum);
@@ -67,40 +73,79 @@ class AlbumController extends Controller
 
         return response(null);
     }
-    public function get($hash)
+    public function get(AlbumRequest $request, $hash)
     {
         // Получение пользователя
         $user = request()->user();
 
+        // Фильтры
+        $allowedSorts = array_column(SortType::cases(), 'value');
+        $sortType = $request->sort ?? $allowedSorts[0];
+
+        $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
+        //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
+        $naturalSort = "natural_sort_key $sortDirection";
+        $orderByRaw = match ($sortType) {
+            'name'  =>                                "$naturalSort",
+            'ratio' => "width / height $sortDirection, $naturalSort",
+            default =>      "$sortType $sortDirection, $naturalSort",
+        };
+        $limit = intval($request->limit);
+        if (!$limit)
+            $limit = 4;
+
         // Получение альбома из БД и проверка доступа пользователю
         $targetAlbum = Album::getByHash($hash);
-        if (!$targetAlbum->hasAccessCached($user))
+        if ($targetAlbum->getAccessLevelCached($user) == AccessLevel::None)
             throw new ApiException(403, 'Forbidden for you');
 
         // Получение вложенных альбомов из БД если индексировалось, иначе индексировать
         //TODO: мб добавить опцию через сколько времени надо переиндексировать?
         if ($targetAlbum->last_indexation === null)
-            $allowedChildren = AlbumController::indexingAlbumChildren($targetAlbum);
-        else {
-            $children = Album::where('parent_album_id', $targetAlbum->id)->get();
-            $allowedChildren = [];
-            foreach ($children as $child)
-                if ($child->hasAccessCached($user))
-                    $allowedChildren[] = $child;
+            AlbumController::indexingAlbumChildren($targetAlbum);
+
+        $children = Album::where('parent_album_id', $targetAlbum->id)->withCount([
+            'images',
+            'childAlbums as albums_count'
+        ])->get();
+
+        /*
+        if ($user?->is_admin)
+            $allowedChildren = $children;
+        else
+            $allowedChildren = $children->reject(fn ($child) => !$child->hasAccessCached($user));
+        */
+        $allowedChildren = collect();
+
+        foreach ($children as $child) {
+            switch ($child->getAccessLevelCached($user)) {
+                case AccessLevel::None:
+                    break;
+
+                case AccessLevel::AsAdmin;
+                case AccessLevel::AsAllowedUser:
+                    $child['sign'] = $child->getSign($user);
+
+                case AccessLevel::AsGuest:
+                    $allowedChildren->push($child);
+                    break;
+            }
         }
+
+        if ($limit)
+            foreach ($allowedChildren as $child)
+                $child['images'] = Image
+                    ::where('album_id', $child->id)
+                    ->limit($limit)
+                    ->orderByRaw($orderByRaw)
+                    ->get();
 
         // Проход по родителям альбома для ответа (цепочка родителей)
         $parentsChain = [];
-        $parentId = $targetAlbum->parent_album_id;
-        while ($parentId) {
-            $parent = Album::find($parentId);
-
-            // Прерывание записи, если в БД нет альбома с таким ID или нет доступа к n-родительскому альбому
-            if (!$parent || !$parent->hasAccessCached($user)) break;
-
-            // Прерывание записи, если нет доступа к n-родительскому альбому
-            $parentId = $parent->parent_album_id;
-            $parentsChain[] = $parent;
+        $ancestors = $targetAlbum->ancestors()->get();
+        foreach ($ancestors as $ancestor) {
+            if ($ancestor->getAccessLevelCached($user) == AccessLevel::None) break;
+            $parentsChain[] = $ancestor;
         }
 
         // Компактный объект ответа
@@ -109,13 +154,25 @@ class AlbumController extends Controller
             $response['last_indexation'] = $targetAlbum->last_indexation;
 
         if (count($allowedChildren)) {
-            foreach ($allowedChildren as $album)
-                $childrenRefined[$album->name] = ['hash' => $album->hash];
-
+            foreach ($allowedChildren as $album) {
+                $childData = [
+                    'hash' => $album->hash,
+                    'last_indexation' => $album->last_indexation,
+                    'guest_allow' => $album->guest_allow,
+                ];
+                //if ($user && $limit && $album->getAccessLevelCached() != AccessLevel::AsGuest) $childData['sign'] = $album->getSign($user);
+                if ($album->sign) $childData['sign'] = $album->sign;
+                if ($album->albums_count) $childData['albums_count'] = $album->albums_count;
+                if ($album->images_count) {
+                    $childData['images_count'] = $album->images_count;
+                    if ($limit) $childData['images'] = ImageResource::collection($album->images);
+                }
+                $childrenRefined[$album->name] = $childData;
+            }
             $response['children'] = $childrenRefined;
         }
         if (count($parentsChain)) {
-            foreach (array_reverse($parentsChain) as $album) {
+            foreach ($parentsChain as $album) {
                 if ($album->path === '/') $parentsChainRefined['/'] = ['hash' => $album->hash];
                 else             $parentsChainRefined[$album->name] = ['hash' => $album->hash];
             }

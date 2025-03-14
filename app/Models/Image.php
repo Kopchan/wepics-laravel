@@ -30,9 +30,49 @@ class Image extends Model
             throw new ApiException(404, "Image not found");
         return $image;
     }
+
     // Получение имя класса, управляющий тегами на этой модели
     public static function getTagClassName(): string {
         return Tag::class;
+    }
+
+    // Обработка событий модели
+    protected static function booted()
+    {
+        static::saving(function ($item) {
+            // Автоматически обновляем natural_sort_name при сохранении
+            $item->natural_sort_key = $item->normalizeName($item->name);
+        });
+    }
+
+    // Генерация имени для натуральной сортировки
+    public static function normalizeName(string $name): string
+    {
+        // Нормализация чисел
+        $normalizedName = preg_replace_callback('/(?<=[^\p{L}\d])\d+/u', function ($matches) {
+            return str_pad($matches[0], 10, '0', STR_PAD_LEFT);
+        }, $name);
+
+        // Определяем расширение файла
+        $extension = '';
+        if (preg_match('/\.([a-zA-Z0-9]+)(\.[a-zA-Z0-9]+)?$/', $normalizedName, $matches)) {
+            $extension = $matches[0]; // Получаем расширение (включая точку)
+        }
+
+        // Если имя файла состоит только из расширения
+        if (strlen($normalizedName) === strlen($extension)) {
+            // Обрезаем расширение до 255 символов
+            return substr($extension, 0, 255);
+        }
+
+        // Вычисляем максимальную длину основной части имени
+        $maxBaseLength = 255 - strlen($extension);
+
+        // Обрезаем основную часть имени, если она превышает допустимую длину
+        $baseName = substr($normalizedName, 0, $maxBaseLength);
+
+        // Собираем итоговое имя
+        return $baseName . $extension;
     }
 
     // Связи

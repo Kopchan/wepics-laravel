@@ -2,13 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\ImageExtensionsEnum;
-use App\Enums\SortTypesEnum;
+use App\Enums\AccessLevel;
+use App\Enums\ImageExtension;
+use App\Enums\SortType;
 use App\Exceptions\ApiDebugException;
 use App\Exceptions\ApiException;
 use App\Http\Requests\AlbumImagesRequest;
 use App\Http\Requests\AlbumCreateRequest;
 use App\Http\Requests\UploadRequest;
+use App\Http\Resources\ImageLinkResource;
 use App\Http\Resources\ImageResource;
 use App\Models\Album;
 use App\Models\Image;
@@ -35,7 +37,7 @@ class ImageController extends Controller
         $files = array_filter(glob("$path*", GLOB_MARK), fn ($path) => !in_array($path[-1], ['/', '\\']));
 
         // Получение разрешённых расширений файлов
-        $allowedExtensions = array_column(ImageExtensionsEnum::cases(), 'value');
+        $allowedExtensions = array_column(ImageExtension::cases(), 'value');
 
         // Получение имеющихся картинок в БД
         //$imagesInDB = $album->images()->with('duplicas')->get()->toArray();
@@ -163,7 +165,7 @@ class ImageController extends Controller
         $album = Album::getByHash($albumHash);
         $files = $request->file('images');
         $path = "images$album->path";
-        $allowedExts = array_column(ImageExtensionsEnum::cases(), 'value');
+        $allowedExts = array_column(ImageExtension::cases(), 'value');
         $allowedExitsImploded = implode(',', $allowedExts);
 
         $responses = [];
@@ -235,7 +237,8 @@ class ImageController extends Controller
     {
         $album = Album::getByHash($albumHash);
         $user = $request->user();
-        if (!$album->hasAccessCached($user))
+        $accessLevel = $album->getAccessLevelCached($user);
+        if ($accessLevel == AccessLevel::None)
             throw new ApiException(403, 'Forbidden for you');
 
         $cacheKey = "albumIndexing:hash=$albumHash";
@@ -249,12 +252,12 @@ class ImageController extends Controller
         if ($tagsString)
             $searchedTags = explode(',', $tagsString);
 
-        $allowedSorts = array_column(SortTypesEnum::cases(), 'value');
+        $allowedSorts = array_column(SortType::cases(), 'value');
         $sortType = $request->sort ?? $allowedSorts[0];
 
         $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
-        $naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
-      //$naturalSort = "name $sortDirection";
+      //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
+        $naturalSort = "natural_sort_key $sortDirection";
         $orderByRaw = match ($sortType) {
             'name'  =>                                "$naturalSort",
             'ratio' => "width / height $sortDirection, $naturalSort",
@@ -264,73 +267,64 @@ class ImageController extends Controller
         if (!$limit)
             $limit = 30;
 
-        if (!$searchedTags)
-            $imagesFromDB = Image
-                ::where('album_id', $album->id)
-                ->with('tags', 'reactions')
-                ->orderByRaw($orderByRaw)
-                ->paginate($limit);
-        else
-            $imagesFromDB = Image
-                ::where('album_id', $album->id)
-                ->with('tags', 'reactions')
-                ->orderByRaw($orderByRaw)
-                ->withAllTags($searchedTags)
-                ->paginate($limit);
+        $isNested = $request->has('nested');
+        $isForceNested = $request->nested == 'force'; // TODO: индексировать картинки и альбомы при рекурсивно усиленному
+
+        $albumIds = [$album->id];
+
+        if ($isNested) {
+            $descendants = $album->descendants()->get();
+
+            foreach ($descendants as $descendant) {
+                switch ($descendant->getAccessLevelCached($user)) {
+                    case AccessLevel::None:
+                        $descendants->forget($descendant->id);
+                        break;
+
+                    case AccessLevel::AsAllowedUser;
+                    case AccessLevel::AsAdmin:
+                        $descendant['sign'] = $descendant->getSign($user);
+
+                    case AccessLevel::AsGuest:
+                        $albumIds[] = $descendant->id;
+                        break;
+                }
+            }
+        }
+
+        $dbQuery = $imagesFromDB = Image
+            ::whereIn('album_id', $albumIds)
+            ->with('tags', 'reactions')
+            ->orderByRaw($orderByRaw);
+
+        $imagesFromDB = !$searchedTags
+            ? $dbQuery->paginate($limit)
+            : $dbQuery->withAllTags($searchedTags)->paginate($limit);
+
+        if ($isNested)
+            foreach ($imagesFromDB as $image) {
+                $currentImageAlbum = $descendants?->where('id', $image->album_id)->first();
+
+                if (!$currentImageAlbum) continue;
+                $image->album_hash = $currentImageAlbum->hash;
+
+                if (!$currentImageAlbum->sign) continue;
+                $image->sign = $currentImageAlbum->sign;
+            }
 
         $response = [
             'page'     => $imagesFromDB->currentPage(),
             'per_page' => $imagesFromDB->perPage(),
             'total'    => $imagesFromDB->total(),
-            'pictures' => ImageResource::collection($imagesFromDB->items()),
+            'pictures' => !$isNested
+                ? ImageResource    ::collection($imagesFromDB->items())
+                : ImageLinkResource::collection($imagesFromDB->items()),
         ];
-        if (!$album->hasAccessCached())
-            $response['sign'] = $this->getSign($user, $albumHash);
+
+        if ($user && $accessLevel != AccessLevel::AsGuest)
+            $response['sign'] = $album->getSign($user);
 
         return response($response);
-    }
-
-    public function getSign(User $user, $albumHash): string {
-        $cacheKey = "signAccess:to=$albumHash;for=$user->id";
-        $cachedSign = Cache::get($cacheKey);
-        if ($cachedSign) return $user->id .'_'. $cachedSign;
-
-        $currentDay = date("Y-m-d");
-        $userToken = $user->tokens[0]->value;
-
-        $string = $userToken . $currentDay . $albumHash;
-        $signCode = base64_encode(Hash::make($string));
-
-        Cache::put($cacheKey, $signCode, 3600);
-        return $user->id .'_'. $signCode;
-    }
-
-    public function checkSign($albumHash, $sign): bool
-    {
-        try {
-            $signExploded = explode('_', $sign);
-            $userId   = $signExploded[0];
-            $signCode = $signExploded[1];
-        }
-        catch (\Exception $e) {
-            return false;
-        }
-
-        $cacheKey = "signAccess:to=$albumHash;for=$userId";
-        $cachedSign = Cache::get("signAccess:to=$albumHash;for=$userId");
-        if ($cachedSign === $signCode) return true;
-
-        $user = User::find($signExploded[0]);
-        if (!$user)
-            return false;
-
-        $currentDay = date("Y-m-d");
-        $string = $user->tokens[0]->value . $currentDay . $albumHash;
-
-        $allow = Hash::check($string, base64_decode($signExploded[1]));
-        Cache::put($cacheKey, $signCode, 3600);
-
-        return $allow;
     }
 
     public function thumb($albumHash, $imageHash, $orientation, $size)
@@ -339,12 +333,12 @@ class ImageController extends Controller
         // Проверка доступа по токену в ссылке
         $sign = request()->sign;
         if (
-            !Album::hasAccessCachedByHash($albumHash, null) &&
-            !($sign && $this->checkSign($albumHash, $sign))
+            (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
+            !($sign && Album::checkSignStatic($albumHash, $sign))
         ) {
             // Проверка доступа по токену в заголовках
             $image = Image::getByHash($albumHash, $imageHash);
-            if (!$image->album->hasAccessCached(request()->user()))
+            if (Album::getAccessLevelCachedByHash($albumHash, request()->user()) === AccessLevel::None)
                 throw new ApiException(403, 'Forbidden for you');
         }
 
@@ -396,7 +390,7 @@ class ImageController extends Controller
     public function info($albumHash, $imageHash)
     {
         $image = Image::getByHash($albumHash, $imageHash);
-        if (!$image->album->hasAccessCached(request()->user()))
+        if (!$image->album->getAccessLevelCachedh(request()->user()))
             throw new ApiException(403, 'Forbidden for you');
 
         return response(ImageResource::make($image));
@@ -407,8 +401,8 @@ class ImageController extends Controller
         // Проверка доступа по токену в ссылке
         $sign = request()->sign;
         if (
-            !Album::hasAccessCachedByHash($albumHash, null) &&
-            !($sign && $this->checkSign($albumHash, $sign))
+            (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
+            !($sign && Album::checkSignStatic($albumHash, $sign))
         ) {
             // Проверка доступа по токену в заголовках
             $image = Image::getByHash($albumHash, $imageHash);
@@ -426,8 +420,8 @@ class ImageController extends Controller
         // Проверка доступа по токену в ссылке
         $sign = request()->sign;
         if (
-            !Album::hasAccessCachedByHash($albumHash, null) &&
-            !($sign && $this->checkSign($albumHash, $sign))
+            (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
+            !($sign && Album::checkSignStatic($albumHash, $sign))
         ) {
             // Проверка доступа по токену в заголовках
             $image = Image::getByHash($albumHash, $imageHash);

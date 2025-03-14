@@ -47,7 +47,12 @@ class LogRequest
             $sign = $response->isSuccessful() ? "🟢" : "🔴";
 
             $uri    = $request->getPathInfo();
-            $origin = $request->headers->get('origin') ?? "NO_ORIGIN";
+
+            $origin = $request->header('Origin')
+                   ?? $request->header('Host')
+                   ?? $request->header('Referer')
+                   ?? "NO_ORIGIN";
+
             $userId = $request->user()?->id ??
                 ($request->has('sign')
                     ? explode('_', $request->sign)[0]
