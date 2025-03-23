@@ -16,7 +16,8 @@
         "laravel/sanctum": "^3.3",
         "laravel/tinker": "^2.8",
         "spatie/laravel-settings": "^3.4",
-        "spatie/laravel-tags": "^4.6"
+        "spatie/laravel-tags": "^4.6",
+        "ext-iconv": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.9.1",

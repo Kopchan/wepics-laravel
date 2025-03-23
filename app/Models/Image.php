@@ -45,34 +45,45 @@ class Image extends Model
         });
     }
 
+    const MAX_SORT_KEY_LENGTH = 255;
+
     // Генерация имени для натуральной сортировки
-    public static function normalizeName(string $name): string
+    public static function normalizeName(string $originalName): string
     {
         // Нормализация чисел
-        $normalizedName = preg_replace_callback('/(?<=[^\p{L}\d])\d+/u', function ($matches) {
-            return str_pad($matches[0], 10, '0', STR_PAD_LEFT);
-        }, $name);
+        $normalizedName = preg_replace_callback('/\d+/', function ($matches) {
+            return str_pad($matches[0], 12, '0', STR_PAD_LEFT);
+        }, $originalName);
 
-        // Определяем расширение файла
-        $extension = '';
-        if (preg_match('/\.([a-zA-Z0-9]+)(\.[a-zA-Z0-9]+)?$/', $normalizedName, $matches)) {
-            $extension = $matches[0]; // Получаем расширение (включая точку)
+        $fullNameLength = strlen($normalizedName);
+
+        // Если общая длина превышает максимальную, обрезаем и имя, и расширение
+        if ($fullNameLength > static::MAX_SORT_KEY_LENGTH) {
+            $parts = pathinfo($normalizedName);
+            $name = $parts['filename'];
+            $ext = isset($parts['extension']) ? '.' . $parts['extension'] : '';
+
+            // Вычисляем, сколько символов можно оставить для имени файла
+            $maxNameLength = static::MAX_SORT_KEY_LENGTH - strlen($ext);
+
+            // Если расширение слишком длинное, обрезаем его
+            if ($maxNameLength < 0) {
+                $ext = substr($ext, 0, static::MAX_SORT_KEY_LENGTH);
+                $name = ''; // Имя файла будет пустым, если расширение занимает весь лимит
+            } else {
+                // Обрезаем имя файла, если оно превышает допустимую длину
+                $name = substr($name, 0, $maxNameLength);
+            }
+            $truncatedName = $name . $ext;
+
+            //dd($truncatedName, $name, $ext, $normalizedName, $originalName, $maxNameLength);
         }
-
-        // Если имя файла состоит только из расширения
-        if (strlen($normalizedName) === strlen($extension)) {
-            // Обрезаем расширение до 255 символов
-            return substr($extension, 0, 255);
+        else {
+            $truncatedName = $normalizedName;
         }
-
-        // Вычисляем максимальную длину основной части имени
-        $maxBaseLength = 255 - strlen($extension);
-
-        // Обрезаем основную часть имени, если она превышает допустимую длину
-        $baseName = substr($normalizedName, 0, $maxBaseLength);
 
         // Собираем итоговое имя
-        return $baseName . $extension;
+        return iconv('UTF-8', 'UTF-8//IGNORE', $truncatedName);
     }
 
     // Связи
