@@ -1,8 +1,8 @@
 {
-    "name": "laravel/laravel",
+    "name": "kopchan/wepics",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "Image-Board web service, a tool for uploading, sharing, storing and viewing image albums, with social functionality in the form of displaying emoji reactions to images, with the functionality of categorizing and filtering images with tags and with the ability to restrict access to users or guests to certain albums",
+    "keywords": ["gallery", "self-hosted", "imageboard", "images"],
     "license": "MIT",
     "require": {
         "php": "^8.1",
