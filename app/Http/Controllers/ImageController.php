@@ -271,19 +271,24 @@ class ImageController extends Controller
         $isForceNested = $request->nested == 'force'; // TODO: индексировать картинки и альбомы при рекурсивно усиленному
 
         $albumIds = [$album->id];
-
         if ($isNested) {
             $descendants = $album->descendants()->get();
+            $isNested = !!$descendants->count();
+        }
+
+
+        if ($isNested) {
 
             foreach ($descendants as $descendant) {
                 switch ($descendant->getAccessLevelCached($user)) {
                     case AccessLevel::None:
-                        $descendants->forget($descendant->id);
                         break;
 
                     case AccessLevel::AsAllowedUser;
                     case AccessLevel::AsAdmin:
                         $descendant['sign'] = $descendant->getSign($user);
+                        $albumIds[] = $descendant->id;
+                        break;
 
                     case AccessLevel::AsGuest:
                         $albumIds[] = $descendant->id;
@@ -312,7 +317,7 @@ class ImageController extends Controller
                 if ($currentImageAlbum?->sign)
                     $albumInfo['sign'] = $currentImageAlbum->sign;
 
-                $image->image = $albumInfo;
+                $image->customAlbum = $albumInfo;
             }
 
         $response = [
@@ -324,8 +329,16 @@ class ImageController extends Controller
                 : ImageLinkResource::collection($imagesFromDB->items()),
         ];
 
-        if (!$album->guest_allow && $user && $accessLevel != AccessLevel::AsGuest)
+        if (
+            !$isNested
+            && !$album->guest_allow
+            && $user
+            && $accessLevel != AccessLevel::AsGuest
+        )
             $response['sign'] = $album->getSign($user);
+
+            
+        //dd(!$isNested, !$album->guest_allow, !!$user, $accessLevel != AccessLevel::AsGuest);
 
         //dd($user, $accessLevel, $accessLevel != AccessLevel::AsGuest, $response, $imagesFromDB->toArray());
 
@@ -411,7 +424,7 @@ class ImageController extends Controller
         ) {
             // Проверка доступа по токену в заголовках
             $image = Image::getByHash($albumHash, $imageHash);
-            if (!$image->album->hasAccessCached(request()->user()))
+            if ($image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
                 throw new ApiException(403, 'Forbidden for you');
         }
         $image = $image ?? Image::getByHash($albumHash, $imageHash);
@@ -430,7 +443,7 @@ class ImageController extends Controller
         ) {
             // Проверка доступа по токену в заголовках
             $image = Image::getByHash($albumHash, $imageHash);
-            if (!$image->album->hasAccessCached(request()->user()))
+            if (!$image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
                 throw new ApiException(403, 'Forbidden for you');
         }
         $image = $image ?? Image::getByHash($albumHash, $imageHash);

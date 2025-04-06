@@ -120,20 +120,32 @@ class Album extends Model
     public function getAccessLevelCached(User $user = null): AccessLevel
     {
         $cacheKey = static::buildAccessCacheKey($this->hash, $user?->id);
-        $allowLevel = Cache::get($cacheKey);
 
-        //throw new \Exception($allowLevel->value);
-        if ($allowLevel === null) {
-            $allowLevel = Album::getAccessLevelBatchById($this->id, $user?->id);
+        if ($this->guest_allow) {
+            $result = AccessLevel::AsGuest; 
+            Cache::put($cacheKey, $result, static::ACCESS_CACHE_TTL);
         }
 
-        if ($user?->is_admin) return AccessLevel::AsAdmin;
+        $result ??= Cache::get($cacheKey);
 
-        return $allowLevel;
+        if ($result === null) {
+            $result = Album::getAccessLevelBatchById($this->id, $user?->id);
+        }
+
+        if ($result === AccessLevel::None && $user?->is_admin) {
+            //dd($this->guest_allow, $result, $user?->is_admin);
+            $result = AccessLevel::AsAdmin;
+            Cache::put($cacheKey, $result, static::ACCESS_CACHE_TTL);
+        }
+
+        return $result;
     }
     public static function getAccessLevelBatchById(int $albumId, int $userId = null): AccessLevel
     {
         $ancestors = Album::reversed()->ancestorsAndSelf($albumId);
+
+        if (count($ancestors) && $ancestors[0]->guest_allow)
+            $result = AccessLevel::AsGuest;
 
         if ($userId !== null)
             $rights = AccessRight
@@ -180,17 +192,29 @@ class Album extends Model
     }
     public static function getAccessLevelCachedByHash(string $albumHash, User $user = null): AccessLevel
     {
-        if ($user?->is_admin) return AccessLevel::AsAdmin;
-        Album::query();
 
         $cacheKey = static::buildAccessCacheKey($albumHash, $user?->id);
-        $allowLevel = Cache::get($cacheKey);
+        $result = Cache::get($cacheKey);
 
-        if ($allowLevel === null) {
+        if ($result === null) {
             $album = Album::getByHash($albumHash);
-            $allowLevel = Album::getAccessLevelBatchById($album->id, $user?->id);
+
+            if ($album->guest_allow) 
+                $result = AccessLevel::AsGuest; 
+
+            if (!$result)
+                $result = Album::getAccessLevelBatchById($album->id, $user?->id);
+            else 
+                Cache::put(static::buildAccessCacheKey($albumHash, $user?->id), $result, static::ACCESS_CACHE_TTL);
+            
         }
-        return $allowLevel;
+
+        if ($result === AccessLevel::None && $user?->is_admin) {
+            $result = AccessLevel::AsAdmin;
+            Cache::put(static::buildAccessCacheKey($albumHash, $user?->id), $result, static::ACCESS_CACHE_TTL);
+        }
+
+        return $result;
     }
 
     // Связи

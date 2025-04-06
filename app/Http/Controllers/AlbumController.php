@@ -118,14 +118,15 @@ class AlbumController extends Controller
         $allowedChildren = collect();
 
         foreach ($children as $child) {
-            switch ($child->getAccessLevelCached($user)) {
+            $level = $child->getAccessLevelCached($user);
+            //dd($child, $level);
+            switch ($level) {
                 case AccessLevel::None:
                     break;
 
-                case AccessLevel::AsAdmin;
-                case AccessLevel::AsAllowedUser:
+                case AccessLevel::AsAllowedUser;
+                case AccessLevel::AsAdmin:
                     $child['sign'] = $child->getSign($user);
-
                 case AccessLevel::AsGuest:
                     $allowedChildren->push($child);
                     break;
@@ -144,7 +145,7 @@ class AlbumController extends Controller
         $parentsChain = [];
         $ancestors = $targetAlbum->ancestors()->get();
         foreach ($ancestors as $ancestor) {
-            if ($ancestor->getAccessLevelCached($user) == AccessLevel::None) break;
+            if ($ancestor->getAccessLevelCached($user) === AccessLevel::None) break;
             $parentsChain[] = $ancestor;
         }
 

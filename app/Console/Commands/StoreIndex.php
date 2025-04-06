@@ -210,6 +210,7 @@ class StoreIndex extends Command
                     if ($key !== false) {
                         $existImage = $images[$key];
                         $isDuplica = array_key_exists('origName', $existImage);
+                        // FIXME: если есть дубликаты и один из них удалили (а в базе есть), то в консоли выводится не связные картинки
                         $this->line("<fg=gray>\r"
                             .($isDuplica ? '↩ ' : '  ')
                             . $counter
@@ -220,7 +221,8 @@ class StoreIndex extends Command
                             )
                             ."<fg=gray;href=file:///$file>$name</>"
                             .($isDuplica ? '<fg=white> duplica of </>'
-                            .'<fg=gray;href='.$path.$existImage['origName'].">$existImage[origName]" : '')
+                                .'<fg=gray;href='. $path . $existImage['origName'] .">$existImage[origName]" : ''
+                            )
                             .'</>'
                         );
                         unset($notFoundedImages[$key]);
@@ -233,7 +235,8 @@ class StoreIndex extends Command
                     if (!in_array($extension, $allowedExtensions)) {
                         $this->line("<fg=blue>\r× "
                             . $counter
-                            ." <fg=blue;href=file:///$file>$name</></>"
+                            ." <fg=blue;href=file:///$file>$name</>"
+                            .'</>'
                         );
                         continue;
                     }
@@ -256,10 +259,8 @@ class StoreIndex extends Command
                                 ->update(['name' => $name]);
                             $this->line("<fg=yellow>\r→ "
                                 . $counter
-                                ." <fg=yellow;href="
-                                . url("api/albums/$currentAlbum->hash/images/$hash/orig")
-                                .">$hash</>"
-                                ."<fg=yellow;href=file:///$file>". $images[$key]['name'] ."<fg=white> renamed to </>$name</>"
+                                .' <fg=yellow;href='. url("api/albums/$currentAlbum->hash/images/$hash/orig") .">$hash</>"
+                                ." <fg=yellow;href=file:///$file>". $images[$key]['name'] ."<fg=white> renamed to </>$name</>"
                                 .'</>'
                             );
                             $images[$key]['name'] = $name;
@@ -283,10 +284,8 @@ class StoreIndex extends Command
 
                             $this->line("<fg=yellow>\r↩ "
                                 . $counter
-                                ." <fg=yellow;href="
-                                . url("api/albums/$currentAlbum->hash/images/$hash/orig")
-                                .">$hash</>"
-                                ."<fg=yellow;href=file:///$file>$name<fg=white> linked to </>". $images[$key]['name'] .'</>'
+                                .' <fg=yellow;href='. url("api/albums/$currentAlbum->hash/images/$hash/orig") .">$hash</>"
+                                ." <fg=yellow;href=file:///$file>$name<fg=white> linked to </>". $images[$key]['name'] .'</>'
                                 .'</>'
                             );
                         }
@@ -341,8 +340,7 @@ class StoreIndex extends Command
                     $notFoundedOrigs[] = $notFoundedImage;
 
                 try {
-                    $this->line("<fg=gray>\r"
-                        .($isDuplica ? '↩ ' : '  ')
+                    $this->line("<fg=red>\r- "
                         .'['.$this->counter(0, $filesCount).'] '
                         .($isDuplica ? '' : '<fg=gray;href='
                             . url("api/albums/$notFoundedImage[hash]/images/$notFoundedImage[hash]/orig")
