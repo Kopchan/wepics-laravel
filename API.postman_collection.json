@@ -1,0 +1,1581 @@
+{
+	"info": {
+		"_postman_id": "bdba186a-d7c6-4b52-9de0-5ded6c636243",
+		"name": "Wepics API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32893653",
+		"_collection_link": "https://wepics.postman.co/workspace/Wepics~496a7de0-603c-47c0-b02b-f284072aea34/collection/32893653-bdba186a-d7c6-4b52-9de0-5ded6c636243?action=share&source=collection_link&creator=32893653"
+	},
+	"item": [
+		{
+			"name": "Аутентификация",
+			"item": [
+				{
+					"name": "🟢 Регистрация",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "nickname",
+									"value": "Испытуемый",
+									"type": "text"
+								},
+								{
+									"key": "login",
+									"value": "test",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "12345678",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/users/reg",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users",
+								"reg"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Вход",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);\r",
+									"pm.environment.set(\"token\", jsonData.token);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "login",
+									"value": "admin",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "admin123",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/users/login",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Выход",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{api}}/users/logout",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users",
+								"logout"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Пользователь",
+			"item": [
+				{
+					"name": "🟢 Получение списка пользователей",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/users",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Получение инфо о пользователе",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/users/2",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Создание пользователя",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "nickname",
+									"value": "Испытуемый II",
+									"type": "text"
+								},
+								{
+									"key": "login",
+									"value": "test2",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "12345678",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/users",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Редактирование себя",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "nickname",
+									"value": "Испытуемый изменённый",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "newpassword",
+									"type": "text"
+								},
+								{
+									"key": "login",
+									"value": "testForbidden5",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/users",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Редактирование пользователя",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "nickname",
+									"value": "Испытуемый II",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "login",
+									"value": "test22",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "12345678",
+									"type": "text",
+									"disabled": true
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/users/2",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление пользователя",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/users/2",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"users",
+								"2"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Выдача доступа",
+			"item": [
+				{
+					"name": "🟢 Просмотр прав на альбом",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/access",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"access"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Создание права на альбом",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "user_id",
+									"value": "2",
+									"type": "text"
+								},
+								{
+									"key": "allow",
+									"value": "1",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/albums/A1MNYQWys33q1z5VWAVGFuhvw/access",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"A1MNYQWys33q1z5VWAVGFuhvw",
+								"access"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Создание права на альбом (гостю)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "allow",
+									"value": "1",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/albums/root/access",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"access"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление права на альбом",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{api}}/albums/A1MNYQWys33q1z5VWAVGFuhvw/access?user_id=2",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"A1MNYQWys33q1z5VWAVGFuhvw",
+								"access"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "2"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление права на альбом (гостю)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{api}}/albums/root/access",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"access"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Альбом",
+			"item": [
+				{
+					"name": "🟢 Получение инфо об альбоме (корневого)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Переиндексация альбома",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/rR69d6lSbbHUS6o5qSE18Toyh",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"rR69d6lSbbHUS6o5qSE18Toyh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Получение инфо об альбоме Copy",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/rR69d6lSbbHUS6o5qSE18Toyh",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"rR69d6lSbbHUS6o5qSE18Toyh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Создание пустого альбома",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "name",
+									"value": "My new album",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/albums/root",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Переименование альбома",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/QUq9UqfIdL1vOznMs11rB4Fwl?name=Test new name",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"QUq9UqfIdL1vOznMs11rB4Fwl"
+							],
+							"query": [
+								{
+									"key": "name",
+									"value": "Test new name"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление альбома",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/C6RKixc70SVadUnXrhVvFkvQP",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"C6RKixc70SVadUnXrhVvFkvQP"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Картинки в альбоме",
+			"item": [
+				{
+					"name": "🟢 Получение картинок из альбома (корневого)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/images?sort=ratio",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images"
+							],
+							"query": [
+								{
+									"key": "reverse",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "tags",
+									"value": "tag1,tag2",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "2",
+									"disabled": true
+								},
+								{
+									"key": "per_page",
+									"value": "30",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "ratio"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Получение картинок из альбома",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/QUq9UqfIdL1vOznMs11rB4Fwl/images",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"QUq9UqfIdL1vOznMs11rB4Fwl",
+								"images"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Выгрузка картинок в альбом",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "images[]",
+									"type": "file",
+									"src": [
+										"postman-cloud:///1eede4e1-85cb-4bd0-9c5b-0ff92e52b86c",
+										"postman-cloud:///1eede4e1-85c9-44c0-88c8-e60eb58d67b8",
+										"postman-cloud:///1eede4e1-850a-4de0-93db-beb8a6e6aa44"
+									]
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/albums/root/images",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Картинка",
+			"item": [
+				{
+					"name": "🟢 Получение инфо о картинке",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/images/e26f9adf51b8a60ebf72a01481f4281c",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"e26f9adf51b8a60ebf72a01481f4281c"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Получение оригинала картинки",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/images/8df061a240c80fa61863651f538fdc80/orig",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"8df061a240c80fa61863651f538fdc80",
+								"orig"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Получение превью картинки",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/images/e26f9adf51b8a60ebf72a01481f4281c/thumb/w400?sign=1_JDJ5JDEyJFJ0Lk05WUhkU0ZNZVdFQWdiQUI3eS45ZGticGhjT24uYmNKTG5XOHRXUE5va3NubVJmT2xh",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"e26f9adf51b8a60ebf72a01481f4281c",
+								"thumb",
+								"w400"
+							],
+							"query": [
+								{
+									"key": "sign",
+									"value": "1_JDJ5JDEyJFJ0Lk05WUhkU0ZNZVdFQWdiQUI3eS45ZGticGhjT24uYmNKTG5XOHRXUE5va3NubVJmT2xh",
+									"description": "Мини-токен для альбома"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Переименование картинки",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/images/e26f9adf51b8a60ebf72a01481f4281c?name=New name",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"e26f9adf51b8a60ebf72a01481f4281c"
+							],
+							"query": [
+								{
+									"key": "name",
+									"value": "New name"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление картинки",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/images/dde9360dc1965adb2d4c4568f6eb6853",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"dde9360dc1965adb2d4c4568f6eb6853"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Теги",
+			"item": [
+				{
+					"name": "🟡 Получение тегов и их кол-во связей",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/tags",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"tags"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟡 Поиск тега и его кол-во связей",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "tag",
+									"value": "При",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/tags",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"tags"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟡 Создание тега",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{api}}/tags?tag=asd , asd %2C",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"tags"
+							],
+							"query": [
+								{
+									"key": "tag",
+									"value": "asd , asd %2C"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Переименование тега",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/tags?old_value=Пейзаж&new_value=Пей%26заж",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"tags"
+							],
+							"query": [
+								{
+									"key": "old_value",
+									"value": "Пейзаж"
+								},
+								{
+									"key": "new_value",
+									"value": "Пей&заж"
+								},
+								{
+									"key": "value",
+									"value": "Люди",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление тега",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/tags?value=Карта",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"tags"
+							],
+							"query": [
+								{
+									"key": "value",
+									"value": "Карта"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Выставление тега на картинку",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "tag",
+									"value": "Пейзаж",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/albums/root/images/f5fa2fcaea819867a3ed791c20fcfa03/tags",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"f5fa2fcaea819867a3ed791c20fcfa03",
+								"tags"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление тега с картинки",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/albums/root/images/e26f9adf51b8a60ebf72a01481f4281c/tags?tag=Природа",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"e26f9adf51b8a60ebf72a01481f4281c",
+								"tags"
+							],
+							"query": [
+								{
+									"key": "tag",
+									"value": "Природа"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Реакции",
+			"item": [
+				{
+					"name": "🟡 Получение разрешённых реакций",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api}}/reactions",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"reactions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Добавление разрешённых реакций",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"reactions\": [\r\n        \"👍\",\r\n        \"👎\",\r\n        \"⚡\",\r\n        \"🎉\",\r\n        \"❤️\",\r\n        \"🥵\",\r\n        \"🥛\"\r\n    ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{api}}/reactions",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"reactions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление разрешённых реакций",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"reactions\": [\r\n        \"🗃️\",\r\n        \"📺\",\r\n        \"⚡\"\r\n    ]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{api}}/reactions",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"reactions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Выставление реакции на картинку",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "reaction",
+									"value": "❤️",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/albums/root/images/f5fa2fcaea819867a3ed791c20fcfa03/reactions",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"f5fa2fcaea819867a3ed791c20fcfa03",
+								"reactions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "🟢 Удаление реакции с картинки",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "reaction",
+									"value": "❤️",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{api}}/albums/root/images/f5fa2fcaea819867a3ed791c20fcfa03/reactions",
+							"host": [
+								"{{api}}"
+							],
+							"path": [
+								"albums",
+								"root",
+								"images",
+								"f5fa2fcaea819867a3ed791c20fcfa03",
+								"reactions"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "api",
+			"value": "https://wepics-laravel/api"
+		}
+	]
+}

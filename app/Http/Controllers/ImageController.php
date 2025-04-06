@@ -2,100 +2,162 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\ImageExtensionsEnum;
-use App\Enums\SortTypesEnum;
+use App\Enums\AccessLevel;
+use App\Enums\ImageExtension;
+use App\Enums\SortType;
 use App\Exceptions\ApiDebugException;
 use App\Exceptions\ApiException;
 use App\Http\Requests\AlbumImagesRequest;
-use App\Http\Requests\FilenameCheckRequest;
+use App\Http\Requests\AlbumCreateRequest;
 use App\Http\Requests\UploadRequest;
+use App\Http\Resources\ImageLinkResource;
 use App\Http\Resources\ImageResource;
 use App\Models\Album;
 use App\Models\Image;
+use App\Models\ImageDuplica;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Intervention\Image\ImageManager;
-use Intervention\Image\Drivers\Gd\Driver;
+use Intervention\Image\Laravel\Facades\Image as Intervention;
 use Illuminate\Support\Facades\Storage;
 
 class ImageController extends Controller
 {
-    public static function indexingImages(Album $album): void
+    public static function indexingImages(Album $album)
     {
         // TODO: Перейти на свою индексацию через glob для быстрой и одновременной индексации картинок и папок (мб всех файлов)
         // Путь к альбому
         $path = Storage::path("images$album->path");
 
-        //$start = microtime(true);
-
         // Получение файлов альбома
-        $files = File::files($path); // FIXME: медленное и боится символических ссылок в отличии от Storage::
-
-        //$time_elapsed_secs = microtime(true) - $start;
-        //throw new ApiDebugException($path, $time_elapsed_secs);
-
+        //$files = File::files($path); // FIXME: медленное и боится символических ссылок в отличии от Storage::
+        $files = array_filter(glob("$path*", GLOB_MARK), fn ($path) => !in_array($path[-1], ['/', '\\']));
 
         // Получение разрешённых расширений файлов
-        $allowedExtensions = array_column(ImageExtensionsEnum::cases(), 'value');
+        $allowedExtensions = array_column(ImageExtension::cases(), 'value');
 
         // Получение имеющихся картинок в БД
-        $imagesInDB = $album->images->toArray();
+        //$imagesInDB = $album->images()->with('duplicas')->get()->toArray();
+        $imagesInDB = $album->images()->with('duplicas')->get();
+
+        // Объединение картинок и их дубликатов в единый массив
+        $images = $imagesInDB->flatMap(function ($image) {
+            $origImage = $image->toArray();
+            return array_merge(
+                [$origImage],
+                $image->duplicas->map(fn ($duplica) =>
+                    array_merge($origImage, [
+                        'name' => $duplica->name,
+                        'origName' => $image->name,
+                    ]
+                )
+            )->toArray());
+        })->toArray();
+
+        $imagesNotFinded = [];
+
+        // Массивы для поиска
+        $imagesNames  = array_column($images, 'name');
+        $imagesHashes = array_column($images, 'hash');
+
+        $errors = [];
+
+        // Время начала проходов
+        $start = microtime(true);
 
         // Проход по файлам
-        foreach ($files as $file) {
-            $name = basename($file);
+        foreach ($files as $i => $file) {
+            $i_start = microtime(true);
 
-            //throw new ApiDebugException($name);
-
-            // Проверка наличия в БД картинки, создание если нет
-            $key = array_search($name, array_column($imagesInDB, 'name'));
-            if ($key !== false) {
-                unset($imagesInDB[$key]);
-                $imagesInDB = array_values($imagesInDB);
-                continue;
-            }
-
-            $extension = pathinfo($file, PATHINFO_EXTENSION);
-            if (!in_array($extension, $allowedExtensions))
-                continue;
-
-            $hash = md5(File::get($file));
-            $imageModel = Image
-                ::where('hash', $hash)
-                ->where('album_id', $album->id)
-                ->first();
-            if ($imageModel) {
-                $imageModel->name = $name;
-                $imageModel->save();
-                continue;
-            }
+            // Получение времени
+            if (microtime(true) - $start > 55)
+                throw new ApiDebugException([
+                    'current' => $i,
+                    'total' => count($files),
+                ]);
 
             try {
+                $name = basename($file);
+
+                // Проверка наличия в БД картинки по названию, если есть — пропуск
+                // FIXME: А если юзер переименует две картинки наоборот?
+                $key = array_search($name, $imagesNames);
+                if ($key !== false)
+                    continue;
+
+                // Отсекание не-картинок по расширению файла
+                $extension = pathinfo($file, PATHINFO_EXTENSION);
+                if (!in_array($extension, $allowedExtensions))
+                    continue;
+
+                // Получение хеша картинки (прожорливое к скорости чтения)
+                $hash = hash_file('xxh3', $file);
+
+                // Проверка наличия в БД картинки по хешу, если есть — проверяем в ФС
+                $key = array_search($hash, $imagesHashes);
+                if ($key !== false) {
+                    // Полное имя картинки-оригинала (из БД)
+                    $imageFullName = Storage::path('images' . $album->path . $images[$key]['name']);
+
+                    // Проверка наличие картинки-оригинала в ФС ...
+                    $filesKey = array_search($imageFullName, $files);
+                    if ($filesKey === false) {
+                        // Если нету — переименовываем в БД
+                        Image
+                            ::where('id', $images[$key]['id'])
+                            ->update(['name' => $name]);
+                    } else {
+                        // Если есть — создаём дубликат в БД (чтобы в следующий раз не создавать хеш)
+                        ImageDuplica::create([
+                            'image_id' => $images[$key]['id'],
+                            'name' => $name,
+                        ]);
+
+                        // Записываем в массивы чтобы не наткнутся на повторы снова
+                        $images[$key]['duplicas'][] = ['name' => $name];
+                        $images[] = array_merge($images[$key], [
+                            'name' => $name,
+                            'origName' => $images[$key]['name']
+                        ]);
+                    }
+                    // И пропуск создания картинки в БД
+                    continue;
+                }
+
+                // Получение размеров картинки, если нет размеров (не получили) — пропуск
                 $sizes = getimagesize($file);
+                if (!$sizes) continue;
+
+                // Создание в БД записи
+                $imageModel = Image::create([
+                    'name' => $name,
+                    'hash' => $hash,
+                    'date' => Carbon::createFromTimestamp(File::lastModified($file)),
+                    'size' => File::size($file),
+                    'width'  => $sizes[0],
+                    'height' => $sizes[1],
+                    'album_id' => $album->id,
+                ]);
+
+                // Обновление массивов картинок альбома
+                $images[] = $imageModel->toArray();
+                $imagesNames[] = $name;
+                $imagesHashes[] = $hash;
             }
             catch (\Exception $ex) {
-                throw new ApiDebugException($file, $name, $ex->getMessage());
+                if ($ex instanceof ApiDebugException)
+                    throw $ex;
+
+                $errors[] = $ex;
             }
-
-            if (!$sizes) continue;
-
-            Image::create([
-                'name' => $name,
-                'hash' => $hash,
-                'date' => Carbon::createFromTimestamp(File::lastModified($file)),
-                'size' => File::size($file),
-                'width'  => $sizes[0],
-                'height' => $sizes[1],
-                'album_id' => $album->id,
-            ]);
         }
 
         // Удаление не найденных картинок в БД
-        Image::destroy(array_column($imagesInDB, 'id'));
+        //Image::destroy(array_column($images, 'id')); // FIXME
+        return ['errors' => $errors];
     }
 
     public function upload(UploadRequest $request, $albumHash)
@@ -103,7 +165,7 @@ class ImageController extends Controller
         $album = Album::getByHash($albumHash);
         $files = $request->file('images');
         $path = "images$album->path";
-        $allowedExts = array_column(ImageExtensionsEnum::cases(), 'value');
+        $allowedExts = array_column(ImageExtension::cases(), 'value');
         $allowedExitsImploded = implode(',', $allowedExts);
 
         $responses = [];
@@ -125,7 +187,7 @@ class ImageController extends Controller
             }
 
             // Проверка существования того же файла
-            $imageHash = md5(File::get($file->getRealPath()));
+            $imageHash = hash_file('xxh3', $file);
 
             $image = Image
                 ::where('album_id', $album->id)
@@ -136,7 +198,7 @@ class ImageController extends Controller
                 // Сохранение плохого ответа API
                 $responses['errored'][] = [
                     'name'    => $fileName,
-                    'message' => "Image with md5 hash \"$imageHash\" already exist in this album",
+                    'message' => "Image with this hash \"$imageHash\" already exist in this album",
                 ];
                 continue;
             }
@@ -171,59 +233,18 @@ class ImageController extends Controller
         return response($responses);
     }
 
-    public function test0(AlbumImagesRequest $request, $albumHash) {
-        $start = microtime(true);
-        $path = 'C:\\Users\\Kopch\\Repos\\wepics\\wepics-laravel\\storage\\app\\images/moe/Selected/Port/';
-
-        $files = Storage::files('images/moe/Parsed/kemonoparty/patreon/12281898');
-        $time_elapsed_secs = microtime(true) - $start;
-
-        throw new ApiDebugException($time_elapsed_secs, $files);
-    }
-
-    public function test1(AlbumImagesRequest $request, $albumHash) {
-        $start = microtime(true);
-        $path = 'C:\\Users\\Kopch\\Repos\\wepics\\wepics-laravel\\storage\\app\\images/moe/Selected/Port/';
-        $dirItems = scandir($path);
-
-        $files = [];
-        foreach($dirItems as $item)
-            if (is_file($path . $item))
-                $files[] = $item;
-        /*
-        foreach($dirItems as $index => &$item)
-            if(is_dir($path . $item))
-                unset($dirItems[$index]);
-
-        $files = array_values($dirItems);
-        */
-        $time_elapsed_secs = microtime(true) - $start;
-
-        throw new ApiDebugException($time_elapsed_secs, $files, $dirItems);
-    }
-
-    public function test2(AlbumImagesRequest $request, $albumHash) {
-        $start = microtime(true);
-        $path = 'C:\\Users\\Kopch\\Repos\\wepics\\wepics-laravel\\storage\\app\\images/moe/Selected/Port/';
-
-        $files = array_filter(glob("$path*", GLOB_MARK), fn ($path) => !in_array($path[-1], ['/', '\\']));
-
-        $time_elapsed_secs = microtime(true) - $start;
-
-        throw new ApiDebugException($time_elapsed_secs, $files);
-    }
-
     public function showAll(AlbumImagesRequest $request, $albumHash)
     {
         $album = Album::getByHash($albumHash);
         $user = $request->user();
-        if (!$album->hasAccessCached($user))
+        $accessLevel = $album->getAccessLevelCached($user);
+        if ($accessLevel == AccessLevel::None)
             throw new ApiException(403, 'Forbidden for you');
 
         $cacheKey = "albumIndexing:hash=$albumHash";
         if (!Cache::get($cacheKey)) {
             ImageController::indexingImages($album);
-            Cache::put($cacheKey, true, 600);
+            Cache::put($cacheKey, true, 43200);
         };
 
         $searchedTags = null;
@@ -231,95 +252,113 @@ class ImageController extends Controller
         if ($tagsString)
             $searchedTags = explode(',', $tagsString);
 
-        $allowedSorts = array_column(SortTypesEnum::cases(), 'value');
+        $allowedSorts = array_column(SortType::cases(), 'value');
         $sortType = $request->sort ?? $allowedSorts[0];
 
         $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
-        $naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
+      //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
+        $naturalSort = "natural_sort_key $sortDirection";
         $orderByRaw = match ($sortType) {
             'name'  =>                                "$naturalSort",
             'ratio' => "width / height $sortDirection, $naturalSort",
             default =>      "$sortType $sortDirection, $naturalSort",
         };
-
         $limit = intval($request->limit);
         if (!$limit)
             $limit = 30;
 
-        if (!$searchedTags)
-            $imagesFromDB = Image
-                ::where('album_id', $album->id)
-                ->orderByRaw($orderByRaw)
-                ->paginate($limit);
-        else
-            $imagesFromDB = Image
-                ::where('album_id', $album->id)
-                ->orderByRaw($orderByRaw)
-                ->withAllTags($searchedTags)
-                ->paginate($limit);
+        $isNested = $request->has('nested');
+        $isForceNested = $request->nested == 'force'; // TODO: индексировать картинки и альбомы при рекурсивно усиленному
 
+        $albumIds = [$album->id];
+        if ($isNested) {
+            $descendants = $album->descendants()->get();
+            $isNested = !!$descendants->count();
+        }
+
+
+        if ($isNested) {
+
+            foreach ($descendants as $descendant) {
+                switch ($descendant->getAccessLevelCached($user)) {
+                    case AccessLevel::None:
+                        break;
+
+                    case AccessLevel::AsAllowedUser;
+                    case AccessLevel::AsAdmin:
+                        $descendant['sign'] = $descendant->getSign($user);
+                        $albumIds[] = $descendant->id;
+                        break;
+
+                    case AccessLevel::AsGuest:
+                        $albumIds[] = $descendant->id;
+                        break;
+                }
+            }
+        }
+
+        $dbQuery = $imagesFromDB = Image
+            ::whereIn('album_id', $albumIds)
+            ->with('tags', 'reactions')
+            ->orderByRaw($orderByRaw);
+
+        $imagesFromDB = !$searchedTags
+            ? $dbQuery->paginate($limit)
+            : $dbQuery->withAllTags($searchedTags)->paginate($limit);
+
+        if ($isNested)
+            foreach ($imagesFromDB as $image) {
+                $currentImageAlbum = $descendants?->where('id', $image->album_id)->first();
+                $albumInfo = [];
+                if ($currentImageAlbum) {
+                    $albumInfo['hash'] = $currentImageAlbum->hash;
+                    $albumInfo['name'] = $currentImageAlbum->name;
+                }
+                if ($currentImageAlbum?->sign)
+                    $albumInfo['sign'] = $currentImageAlbum->sign;
+
+                $image->customAlbum = $albumInfo;
+            }
 
         $response = [
             'page'     => $imagesFromDB->currentPage(),
             'per_page' => $imagesFromDB->perPage(),
             'total'    => $imagesFromDB->total(),
-            'pictures' => ImageResource::collection($imagesFromDB->items()),
+            'pictures' => !$isNested
+                ? ImageResource    ::collection($imagesFromDB->items())
+                : ImageLinkResource::collection($imagesFromDB->items()),
         ];
-        if (!$album->hasAccessCached())
-            $response['sign'] = $this->getSign($user, $albumHash);
+
+        if (
+            !$isNested
+            && !$album->guest_allow
+            && $user
+            && $accessLevel != AccessLevel::AsGuest
+        )
+            $response['sign'] = $album->getSign($user);
+
+            
+        //dd(!$isNested, !$album->guest_allow, !!$user, $accessLevel != AccessLevel::AsGuest);
+
+        //dd($user, $accessLevel, $accessLevel != AccessLevel::AsGuest, $response, $imagesFromDB->toArray());
 
         return response($response);
     }
-    public function getSign(User $user, $albumHash): string {
-        $cacheKey = "signAccess:to=$albumHash;for=$user->id";
-        $cachedSign = Cache::get($cacheKey);
-        if ($cachedSign) return $user->id .'_'. $cachedSign;
 
-        $currentDay = date("Y-m-d");
-        $userToken = $user->tokens[0]->value;
-
-        $string = $userToken . $currentDay . $albumHash;
-        $signCode = base64_encode(Hash::make($string));
-
-        Cache::put($cacheKey, $signCode, 3600);
-        return $user->id .'_'. $signCode;
-    }
-
-    public function checkSign($albumHash, $sign): bool
-    {
-        try {
-            $signExploded = explode('_', $sign);
-            $userId   = $signExploded[0];
-            $signCode = $signExploded[1];
-        }
-        catch (\Exception $e) {
-            return false;
-        }
-
-        $cacheKey = "signAccess:to=$albumHash;for=$userId";
-        $cachedSign = Cache::get("signAccess:to=$albumHash;for=$userId");
-        if ($cachedSign === $signCode) return true;
-
-        $user = User::find($signExploded[0]);
-        if (!$user)
-            return false;
-
-        $currentDay = date("Y-m-d");
-        $string = $user->tokens[0]->value . $currentDay . $albumHash;
-
-        $allow = Hash::check($string, base64_decode($signExploded[1]));
-        Cache::put($cacheKey, $signCode, 3600);
-
-        return $allow;
-    }
     public function thumb($albumHash, $imageHash, $orientation, $size)
     {
-        // Проверка доступа
+        // TODO: обрабатывать запрос на превью бОльшего размера, чем оригинала
+        // Проверка доступа по токену в ссылке
         $sign = request()->sign;
         if (
-            !Album::hasAccessCachedByHash($albumHash) &&
-            !($sign && $this->checkSign($albumHash, $sign))
-        ) throw new ApiException(403, 'Forbidden for you');
+            (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
+            !($sign && Album::checkSignStatic($albumHash, $sign))
+        ) {
+            // Проверка доступа по токену в заголовках
+            $image = Image::getByHash($albumHash, $imageHash);
+            if (Album::getAccessLevelCachedByHash($albumHash, request()->user()) === AccessLevel::None)
+                throw new ApiException(403, 'Forbidden for you');
+        }
 
         // Проверка наличия превью в файлах
         $thumbPath = "thumbs/$imageHash-$orientation$size.webp";
@@ -345,12 +384,11 @@ class ImageController extends Controller
             $thumbPath = "thumbs/$imageHash-$orientation$size.webp";
             if (!Storage::exists($thumbPath)) {
                 // Создание превью
-                if (!isset($image)) $image = Image::getByHash($albumHash, $imageHash);
+                $image = $image ?? Image::getByHash($albumHash, $imageHash);
 
-                $imagePath = 'images'. $image->album->path . $image->name;
+                $imagePath = Storage::path('images'. $image->album->path . $image->name);
 
-                $manager = new ImageManager(new Driver());
-                $thumb = $manager->read(Storage::get($imagePath));
+                $thumb = Intervention::read($imagePath);
 
                 if ($orientation == 'w')
                     $thumb->scale(width: $size);
@@ -361,15 +399,16 @@ class ImageController extends Controller
                     Storage::makeDirectory('thumbs');
 
                 $thumb->toWebp(90)->save(Storage::path($thumbPath));
+                unset($thumb);
             }
         }
         return response()->file(Storage::path($thumbPath), ['Cache-Control' => ['max-age=86400', 'private']]);
     }
 
-    public function show($albumHash, $imageHash)
+    public function info($albumHash, $imageHash)
     {
         $image = Image::getByHash($albumHash, $imageHash);
-        if (!$image->album->hasAccessCached(request()->user()))
+        if (!$image->album->getAccessLevelCachedh(request()->user()))
             throw new ApiException(403, 'Forbidden for you');
 
         return response(ImageResource::make($image));
@@ -377,15 +416,43 @@ class ImageController extends Controller
 
     public function orig($albumHash, $imageHash)
     {
-        $image = Image::getByHash($albumHash, $imageHash);
-        if (!$image->album->hasAccessCached(request()->user()))
-            throw new ApiException(403, 'Forbidden for you');
-
+        // Проверка доступа по токену в ссылке
+        $sign = request()->sign;
+        if (
+            (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
+            !($sign && Album::checkSignStatic($albumHash, $sign))
+        ) {
+            // Проверка доступа по токену в заголовках
+            $image = Image::getByHash($albumHash, $imageHash);
+            if ($image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
+                throw new ApiException(403, 'Forbidden for you');
+        }
+        $image = $image ?? Image::getByHash($albumHash, $imageHash);
         $path = Storage::path('images'. $image->album->path . $image->name);
+        ob_end_clean();
         return response()->file($path);
     }
 
-    public function rename(FilenameCheckRequest $request, $albumHash, $imageHash)
+    public function download($albumHash, $imageHash)
+    {
+        // Проверка доступа по токену в ссылке
+        $sign = request()->sign;
+        if (
+            (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
+            !($sign && Album::checkSignStatic($albumHash, $sign))
+        ) {
+            // Проверка доступа по токену в заголовках
+            $image = Image::getByHash($albumHash, $imageHash);
+            if (!$image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
+                throw new ApiException(403, 'Forbidden for you');
+        }
+        $image = $image ?? Image::getByHash($albumHash, $imageHash);
+        $path = Storage::path('images'. $image->album->path . $image->name);
+        ob_end_clean();
+        return response()->download($path, $image->name);
+    }
+
+    public function rename(AlbumCreateRequest $request, $albumHash, $imageHash)
     {
         $image = Image::getByHash($albumHash, $imageHash);
         $imageExt = pathinfo($image->name, PATHINFO_EXTENSION);

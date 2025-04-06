@@ -27,7 +27,7 @@ class UserController extends Controller
         return response([
             'token' => $token,
             'nickname' => $user->nickname,
-            'isAdmin' => $user->is_admin,
+            'isAdmin'  => $user->is_admin,
         ]);
     }
     public function reg(UserRegisterRequest $request) {

@@ -2,16 +2,20 @@
 
 namespace App\Models;
 
-use App\Exceptions\ApiDebugException;
+use App\Enums\AccessLevel;
 use App\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Kalnoy\Nestedset\NodeTrait;
+use phpDocumentor\Reflection\Types\Static_;
 
 class Album extends Model
 {
-    use HasFactory;
+    use NodeTrait, HasFactory;
 
     // Поля для заполнения
     protected $fillable = [
@@ -20,13 +24,23 @@ class Album extends Model
         'hash',
         'last_indexation',
         'parent_album_id',
+        'guest_allow',
+    ];
+
+    public function getParentIdName() {
+        return 'parent_album_id';
+    }
+
+    protected $casts = [
+        'guest_allow' => 'boolean',
     ];
 
     // Функции
     /**
      * Получение альбома по его уникальному хешу
      */
-    static public function getByHash($hash): Album {
+    static public function getByHash($hash): Album
+    {
         if ($hash != 'root') {
             $album = Album::where('hash', $hash)->first();
             if (!$album)
@@ -43,144 +57,164 @@ class Album extends Model
         }
         return $album;
     }
-    /**
-     * Проверка пользователя на доступ к альбому
-     */
-    public function hasAccess(User $user = null): bool {
-        // Проверка админ ли пользователь
-        //if ($user?->is_admin)
-        //    return true;
 
-        // Проверка есть ли доступ гостю
-        $right = AccessRight
-            ::where('user_id' , null)
-            ->where('album_id', $this->id)
-            ->first();
-        if ($right?->allowed)
-            return true;
-
-        if ($user) {
-            // Проверка есть ли доступ пользователю
-            $right = AccessRight
-                ::where('user_id' , $user->id)
-                ->where('album_id', $this->id)
-                ->first();
-            if ($right?->allowed)
-                return true;
-        }
-        // TODO: Сделать восходящую (к род. альбомам) проверку доступа, если не было запретов
-
-        return false;
+    // Проверка на доступ к статичным файлам альбома
+    const SIGN_CACHE_TTL = 3600;
+    static public function buildSignCacheKey(string $albumHash, int $userId = null): string {
+        return "signAccess:to=$albumHash;for=$userId";
     }
+    public function getSign(User $user) {
+        return static::getSignStatic($this->hash, $user);
+    }
+    public static function getSignStatic($albumHash, User $user): string
+    {
+        $cacheKey = static::buildSignCacheKey($albumHash, $user->id);
+        $cachedSign = Cache::get($cacheKey);
+        if ($cachedSign) return $user->id .'_'. $cachedSign;
 
-    public function hasAccessCached(User $user = null) {
-        if ($user?->is_admin) return true;
+        $currentDay = date("Y-m-d");
+        $userToken = $user->tokens[0]->value;
 
-        $cacheKey = "access:to=$this->hash;for=$user?->id";
-        $allow = Cache::get($cacheKey);
+        $string = $userToken . $currentDay . $albumHash;
+        $signCode = base64_encode(Hash::make($string));
 
-        if ($allow === null) {
-            //$allow = $this->hasAccess($user);
-            $allow = Album::hasAccessFastById($this->id, $user?->id);
-            Cache::put($cacheKey, $allow, 86400);
+        Cache::put($cacheKey, $signCode, static::SIGN_CACHE_TTL);
+        return $user->id .'_'. $signCode;
+    }
+    public function checkSign($sign) {
+        return static::checkSignStatic($this->hash, $sign);
+    }
+    public static function checkSignStatic($albumHash, $sign): bool
+    {
+        try {
+            $signExploded = explode('_', $sign);
+            $userId   = $signExploded[0];
+            $signCode = $signExploded[1];
         }
+        catch (\Exception $e) {
+            return false;
+        }
+
+        $cacheKey = static::buildSignCacheKey($albumHash, $userId);
+        $cachedSign = Cache::get($cacheKey);
+        if ($cachedSign === $signCode) return true;
+
+        $user = User::find($signExploded[0]);
+        if (!$user)
+            return false;
+
+        $currentDay = date("Y-m-d");
+        $string = $user->tokens[0]->value . $currentDay . $albumHash;
+
+        $allow = Hash::check($string, base64_decode($signExploded[1]));
+        Cache::put($cacheKey, $signCode, static::SIGN_CACHE_TTL);
+
         return $allow;
     }
 
-    public static function hasAccessCachedByHash(string $hash, User $user = null) {
-        if ($user?->is_admin) return true;
+    // Проверки на доступ пользователя к альбому
+    const ACCESS_CACHE_TTL = 604800;
+    static public function buildAccessCacheKey(string $albumHash, int $userId = null): string {
+        return "access:to=$albumHash;for=$userId";
+    }
+    public function getAccessLevelCached(User $user = null): AccessLevel
+    {
+        $cacheKey = static::buildAccessCacheKey($this->hash, $user?->id);
 
-        $cacheKey = "access:to=$hash;for=$user?->id";
-        $allow = Cache::get($cacheKey);
-
-        if ($allow === null) {
-            $album = Album::getByHash($hash);
-            //$allow = $album->hasAccess($user);
-            $allow = Album::hasAccessFastByHash($hash, $user?->id);
-            Cache::put($cacheKey, $allow, 86400);
+        if ($this->guest_allow) {
+            $result = AccessLevel::AsGuest; 
+            Cache::put($cacheKey, $result, static::ACCESS_CACHE_TTL);
         }
-        return $allow;
-    }
 
-    public static function hasAccessFastById(int $albumId, int $userId = null): bool {
-        $right = AccessRight
-            ::where('album_id', $albumId)
-            ->where('user_id', $userId)
-            ->first();
+        $result ??= Cache::get($cacheKey);
 
-        if (!$right && $userId)
-            $right = AccessRight
-                ::where('album_id', $albumId)
-                ->where('user_id', null)
-                ->first();
-
-        if ($right)
-            return $right->allowed;
-
-        $parentAlbumId = Album::find($albumId)->parent_album_id;
-        if ($parentAlbumId)
-            return Album::hasAccessFastById($parentAlbumId, $userId);
-
-        return false;
-    }
-    public static function hasAccessFastByHash(string $hash, int $userId = null): bool {
-        $album = Album::getByHash($hash);
-        $right = AccessRight
-            ::where('album_id', $album->id)
-            ->where('user_id', $userId)
-            ->first();
-
-        if (!$right && $userId)
-            $right = AccessRight
-                ::where('album_id', $album->id)
-                ->where('user_id', null)
-                ->first();
-
-        if ($right)
-            return $right->allowed;
-
-        $parentAlbumId = $album->parent_album_id;
-        if ($parentAlbumId)
-            return Album::hasAccessFastById($parentAlbumId, $userId);
-
-        return false;
-    }
-
-    public static function hasAccessFastOldByHash(string $hash, int $userId = null) {
-        $res = DB
-            ::table('access_rights')
-            ->rightJoin('albums', 'access_rights.album_id', '=', 'albums.id')
-            ->where('user_id', $userId)
-            ->where('hash', $hash)
-            ->select('allowed', 'parent_album_id', 'path')
-            ->first();
-
-        if ($res !== null) {
-            if ($res->allowed !== null) return $res->allowed;
-            if ($res->path === '/')     return false;
+        if ($result === null) {
+            $result = Album::getAccessLevelBatchById($this->id, $user?->id);
         }
-        return Album::hasAccessFastById($res->parent_album_id, $userId);
-    }
 
-    public static function hasAccessFastOldById(int $albumId, int $userId = null): bool {
-        $res = DB
-            ::table('access_rights')
-            ->rightJoin('albums', 'access_rights.album_id', '=', 'albums.id')
-            ->where('user_id', $userId)
-            ->where('album_id', $albumId)
-            ->select('allowed', 'parent_album_id', 'path')
-            ->first();
-        // TODO: сделать несколько селектов в одном запросе, а то where обнуляют все поиски альбома и path уже не чекнуть
-        throw new ApiDebugException([
-            'res' => $res,
-            'user_id' => $userId,
-            'album_id' => $albumId,
-        ]);
-        if ($res !== null) {
-            if ($res->allowed !== null) return $res->allowed;
-            if ($res->path === '/')     return false;
+        if ($result === AccessLevel::None && $user?->is_admin) {
+            //dd($this->guest_allow, $result, $user?->is_admin);
+            $result = AccessLevel::AsAdmin;
+            Cache::put($cacheKey, $result, static::ACCESS_CACHE_TTL);
         }
-        return Album::hasAccessFastById($res->parent_album_id, $userId);
+
+        return $result;
+    }
+    public static function getAccessLevelBatchById(int $albumId, int $userId = null): AccessLevel
+    {
+        $ancestors = Album::reversed()->ancestorsAndSelf($albumId);
+
+        if (count($ancestors) && $ancestors[0]->guest_allow)
+            $result = AccessLevel::AsGuest;
+
+        if ($userId !== null)
+            $rights = AccessRight
+                ::whereIn('album_id', $ancestors->pluck('id'))
+                ->where('user_id', $userId)
+                ->get();
+
+        $passedAlbums = [];
+        $result = AccessLevel::None;
+        foreach ($ancestors as $ancestor) {
+            $passedAlbums[] = $ancestor;
+            if ($userId === null && $ancestor->guest_allow === false) {
+                $result = AccessLevel::None;
+                break;
+            }
+
+            if ($ancestor->guest_allow === true) {
+                $result = AccessLevel::AsGuest;
+                break;
+            }
+
+            if ($userId === null) continue;
+
+            $right = $rights->where(['album_id'])->first();
+            if ($right === null) {
+                if ($ancestor->guest_allow === false) {
+                    $result = AccessLevel::None;
+                    break;
+                }
+                continue;
+            }
+
+            $result = $right->allowed
+                ? AccessLevel::AsAllowedUser // AccessLevel::AsAllowedUser
+                : AccessLevel::None;
+            break;
+        }
+
+        foreach ($passedAlbums as $passedAlbum) {
+            Cache::put(static::buildAccessCacheKey($passedAlbum->hash, $userId), $result, static::ACCESS_CACHE_TTL);
+        }
+
+        return $result;
+    }
+    public static function getAccessLevelCachedByHash(string $albumHash, User $user = null): AccessLevel
+    {
+
+        $cacheKey = static::buildAccessCacheKey($albumHash, $user?->id);
+        $result = Cache::get($cacheKey);
+
+        if ($result === null) {
+            $album = Album::getByHash($albumHash);
+
+            if ($album->guest_allow) 
+                $result = AccessLevel::AsGuest; 
+
+            if (!$result)
+                $result = Album::getAccessLevelBatchById($album->id, $user?->id);
+            else 
+                Cache::put(static::buildAccessCacheKey($albumHash, $user?->id), $result, static::ACCESS_CACHE_TTL);
+            
+        }
+
+        if ($result === AccessLevel::None && $user?->is_admin) {
+            $result = AccessLevel::AsAdmin;
+            Cache::put(static::buildAccessCacheKey($albumHash, $user?->id), $result, static::ACCESS_CACHE_TTL);
+        }
+
+        return $result;
     }
 
     // Связи
@@ -195,5 +229,17 @@ class Album extends Model
     }
     public function childAlbums() {
         return $this->hasMany(Album::class, 'parent_album_id');
+    }
+
+    public function getAllDescendants()
+    {
+        $descendants = collect();
+
+        foreach ($this->childAlbums as $child) {
+            $descendants->push($child);
+            $descendants = $descendants->merge($child->getAllDescendants());
+        }
+
+        return $descendants;
     }
 }

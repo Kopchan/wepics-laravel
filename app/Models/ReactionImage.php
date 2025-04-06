@@ -2,11 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
-class ReactionImage extends Model
+class ReactionImage extends Pivot
 {
+    protected $table = 'reaction_images';
+
     // Заполняемые поля
     protected $fillable = [
         'image_id', 'reaction_id', 'user_id'
@@ -14,12 +15,12 @@ class ReactionImage extends Model
 
     // Связи
     public function image() {
-        return $this->belongsToMany(Image::class);
-    }
-    public function user() {
-        return $this->belongsToMany(User::class);
+        return $this->belongsTo(Image::class);
     }
     public function reaction() {
-        return $this->belongsToMany(Reaction::class);
+        return $this->belongsTo(Reaction::class);
+    }
+    public function user() {
+        return $this->belongsTo(User::class);
     }
 }
