@@ -23,7 +23,7 @@ mkdir wepics
 ```
 Go to new folder
 ```bash
-mkdir wepics
+cd wepics
 ```
 Clone this repo into current empty folder
 ```bash
