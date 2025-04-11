@@ -11,7 +11,6 @@ use App\Http\Requests\AlbumRequest;
 use App\Http\Resources\ImageResource;
 use App\Models\Album;
 use App\Models\Image;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -90,9 +89,9 @@ class AlbumController extends Controller
             'ratio' => "width / height $sortDirection, $naturalSort",
             default =>      "$sortType $sortDirection, $naturalSort",
         };
-        $limit = intval($request->limit);
-        if (!$limit)
-            $limit = 4;
+        $albumImagesJoin = intval($request->images);
+        if (!$albumImagesJoin)
+            $albumImagesJoin = 4;
 
         // Получение альбома из БД и проверка доступа пользователю
         $targetAlbum = Album::getByHash($hash);
@@ -133,11 +132,11 @@ class AlbumController extends Controller
             }
         }
 
-        if ($limit)
+        if ($albumImagesJoin)
             foreach ($allowedChildren as $child)
                 $child['images'] = Image
                     ::where('album_id', $child->id)
-                    ->limit($limit)
+                    ->limit($albumImagesJoin)
                     ->orderByRaw($orderByRaw)
                     ->get();
 
@@ -166,7 +165,7 @@ class AlbumController extends Controller
                 if ($album->albums_count) $childData['albums_count'] = $album->albums_count;
                 if ($album->images_count) {
                     $childData['images_count'] = $album->images_count;
-                    if ($limit) $childData['images'] = ImageResource::collection($album->images);
+                    if ($albumImagesJoin) $childData['images'] = ImageResource::collection($album->images);
                 }
                 $childrenRefined[$album->name] = $childData;
             }
