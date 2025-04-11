@@ -77,7 +77,7 @@ Windows CMD with full paths:
 mklink /D "C:\xampp\htdocs\wepics\storage\app\images\ALBUM_NAME" "C:\Users\USERNAME\Pictures\GRAB_FOLDER_NAME"
 ```
 Windows CMD if in the project folder:
-```
+```bat
 cd storage\app\images\ 
 mklink /D ALBUM_NAME "D:\Photos"
 ```
