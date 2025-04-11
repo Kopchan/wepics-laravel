@@ -14,6 +14,7 @@
         "jenssegers/agent": "^2.6",
         "kalnoy/nestedset": "^6.0",
         "laravel/framework": "^10.10",
+        "laravel/octane": "^2.8",
         "laravel/sanctum": "^3.3",
         "laravel/tinker": "^2.8",
         "spatie/laravel-settings": "^3.4",
