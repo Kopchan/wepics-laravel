@@ -32,7 +32,7 @@ class ReactionController extends Controller
     // Удаление разрешённых реакций
     public function remove(ReactionRequest $request)
     {
-        foreach ($request->reactions  as $reaction) {
+        foreach ($request->reactions as $reaction) {
             $reactionFromDB = Reaction::where('value',$reaction)->first();
             if(!$reactionFromDB)
                 throw new ApiException(404, "Reaction \"$reaction\" not found");

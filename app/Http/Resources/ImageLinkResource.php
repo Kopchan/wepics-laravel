@@ -15,14 +15,17 @@ class ImageLinkResource extends JsonResource
             'name'       => $this->name,
             'hash'       => $this->hash,
             'album'      => $this->when($this->customAlbum, fn () => [
-                'hash'   => $this->when(isset($this->customAlbum['hash']), fn () => $this->customAlbum['hash']),
-                'name'   => $this->when(isset($this->customAlbum['name']), fn () => $this->customAlbum['name']),
-                'sign'   => $this->when(isset($this->customAlbum['sign']) != null, fn () => $this->customAlbum['sign']),
+                'hash'     => $this->when(isset($this->customAlbum['hash'    ]), fn() => $this->customAlbum['hash']),
+                'alias'    => $this->when(isset($this->customAlbum['alias'   ]), fn() => $this->customAlbum['alias']),
+                'name'     => $this->when(isset($this->customAlbum['name'    ]), fn() => $this->customAlbum['name']),
+                'sign'     => $this->when(isset($this->customAlbum['sign'    ]), fn() => $this->customAlbum['sign']),
+                'ratingId' => $this->when(isset($this->customAlbum['ratingId']), fn() => $this->customAlbum['ratingId']),
             ]),
             'date'       => $this->date,
             'size'       => $this->size,
             'width'      => $this->width,
             'height'     => $this->height,
+            'ratingId'   => $this->when($this->age_rating_id, $this->age_rating_id),
             'tags'       => $this->whenLoaded('tags', fn() =>
                 $this->when($this->tags->isNotEmpty(), fn () => TagResource::collection($this->tags))
             ),

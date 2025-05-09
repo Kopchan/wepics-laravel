@@ -2,7 +2,12 @@
 
 namespace App\Enums;
 
-enum AccessLevel: string {
+use App\Traits\EnumValues;
+
+enum AccessLevel: string
+{
+    use EnumValues;
+
     case None = 'none';
     case AsGuest = 'guest';
     case AsAllowedUser = 'user';

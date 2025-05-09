@@ -20,6 +20,7 @@ class ImageResource extends JsonResource
             'size'      => $this->size,
             'width'     => $this->width,
             'height'    => $this->height,
+            'ratingId'  => $this->when($this->age_rating_id, $this->age_rating_id),
             'tags'      => $this->whenLoaded('tags', fn() =>
                 $this->when($this->tags->isNotEmpty(), fn () => TagResource::collection($this->tags))
             ),

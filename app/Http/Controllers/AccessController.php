@@ -12,7 +12,7 @@ class AccessController extends Controller
 {
     public function showAll($hash)
     {
-        $album = Album::getByHash($hash);
+        $album = Album::getByHashOrAlias($hash);
 
         $rights = $album->accessRights()->with('user')->get();
         //if (count($rights) < 1)

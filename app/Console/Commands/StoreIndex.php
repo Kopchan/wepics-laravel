@@ -38,32 +38,33 @@ class StoreIndex extends Command
         //$this->output->getFormatter()->setStyle('error'  , new OutputFormatterStyle('red' ));
         $this->output->getFormatter()->setStyle('comment', new OutputFormatterStyle('gray'));
 
+        $this->line('Fixing tree...');
+        Album::fixTree();
+        $this::newLine();
+
+        $this->line('Get all albums...');
         $albums = Album
             ::query()
             ->orderByRaw('LENGTH(path) - LENGTH(REPLACE(path, "/", ""))') // Сортировка по количеству слешей
             ->orderByRaw('LENGTH(path)')                                  // Сортировка по длине пути
             ->orderBy('path')                                          // Сортировка по алфавиту
             ->get();
-        $allowedExtensions = array_column(ImageExtension::cases(), 'value');
+        $this::newLine();
+        $allowedExtensions = ImageExtension::values();
 
         //if (!$this->confirm('Do you wish index albums? ['. $albums->count() .' in DB already]', true)) return;
-
-        $this->line('Fixing tree...');
-        Album::fixTree();
-        $this::newLine();
 
         $startFrom = $this->option('start-from');
         if (!$startFrom)
             $currentAlbumKey = 0;
         else {
-            if (is_numeric($startFrom)) {
+            if (is_numeric($startFrom))
                 $currentAlbumKey = $albums->search(fn ($a) => $a['id'] == $startFrom);
-            } else {
-                $currentAlbumKey = $albums->search(fn ($a) => $a['hash'] == $startFrom);
-            }
+            else
+                $currentAlbumKey = $albums->search(fn ($a) => $a['hash'] === $startFrom || $a['alias'] === $startFrom);
         }
         if ($currentAlbumKey === false) {
-            $this->warn("Album not found with $startFrom!");
+            $this->warn("Album not found with \"$startFrom\"");
             return;
         }
 
@@ -73,10 +74,10 @@ class StoreIndex extends Command
 
             $currentAlbumKey++;
             $this->line('<fg=gray;options=bold>['.$this->counter($currentAlbumKey, $albums->count())
-                .'] #' . $this->formatNumber($currentAlbum->id)
-                ." $currentAlbum->name "
-                ." <bg=bright-cyan;fg=black;href=". url('../album/'. $currentAlbum->hash) ."> wepics $currentAlbum->hash </> "
-                ." <bg=bright-magenta;fg=black;href=file:///$path> explorer $currentAlbum->path </></> "
+                .']  #' . $this->formatNumber($currentAlbum->id)
+                ."  <fg=yellow;options=bold>$currentAlbum->name</> "
+                ." <bg=black;fg=white;href=". url('../album/'. $currentAlbum->hash) ."> 🌐 ".($currentAlbum->alias ?? $currentAlbum->hash)." </> "
+                ." <bg=gray;fg=black;href=file:///$path> 📁 $currentAlbum->path </></> "
             );
 
             try {
@@ -113,7 +114,7 @@ class StoreIndex extends Command
                     $albumChild = $albumChildren[$key];
                     $this->line(
                         "  <fg=gray;href=". url("../album/$albumChild->hash") .">$albumChild->hash</> "
-                        ."<fg=gray;href=file:///". Storage::path("images$childPath") .">$basename/</>"
+                        ."<fg=gray;href=file:///". Storage::path("images$childPath") .">$basename/</> "
                     );
                     $albumChildren->forget($key);
                 }
@@ -129,14 +130,14 @@ class StoreIndex extends Command
                     $newAlbums[] = $childAlbum;
                     $this->info('<fg=green>+ '
                         ."<fg=green;href=". url("../album/$hash") .">$hash</> "
-                        ."<fg=green;href=file:///". Storage::path("images$childPath") .">$basename/</></>"
+                        ."<fg=green;href=file:///". Storage::path("images$childPath") .">$basename/</></> "
                     );
                 }
             }
             foreach ($albumChildren as $key => $notFoundedAlbum) {
                 $this->line('<fg=red>- '
                     ."<fg=red;href=". url("../album/$notFoundedAlbum->hash") .">$notFoundedAlbum->hash</> "
-                    ."<fg=red;href=file:///". Storage::path('images'). $notFoundedAlbum->path .'>'.basename($notFoundedAlbum->path).'/</></>'
+                    ."<fg=red;href=file:///". Storage::path('images'). $notFoundedAlbum->path .'>'.basename($notFoundedAlbum->path).'/</></> '
                 );
                 //dd("try delete?", $key, $albums[$key]);
                 //$clone = clone $albums;
@@ -200,7 +201,7 @@ class StoreIndex extends Command
             // Проход по файлам
             foreach ($files as $i => $file) {
                 $name = basename($file);
-                $counter = '['.$this->counter($i, $filesCount).']';
+                $counter = '['.$this->counter($i+1, $filesCount).']';
                 $this->output->write("  $counter <href=file:///$file>$name</>");
 
                 try {
@@ -221,7 +222,7 @@ class StoreIndex extends Command
                             )
                             ."<fg=gray;href=file:///$file>$name</>"
                             .($isDuplica ? '<fg=white> duplica of </>'
-                                .'<fg=gray;href='. $path . $existImage['origName'] .">$existImage[origName]" : ''
+                                .'<fg=gray;href='. $path . $existImage['origName'] .">$existImage[origName]</>" : ''
                             )
                             .'</>'
                         );
@@ -374,8 +375,11 @@ class StoreIndex extends Command
             $currentAlbum->last_indexation = now();
             $currentAlbum->save();
         }
+        $this->line('Albums are out.');
+        $this::newLine();
 
         $this->line('Fixing tree...');
         Album::fixTree();
+        $this::newLine();
     }
 }

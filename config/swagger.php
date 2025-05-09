@@ -49,11 +49,11 @@ return [
     | This options to enable documentation auth
     |
     */
-    "enable_auth" => true,
-    "username" => "user",
-    "password" => "333",
-    "sesson_ttl" => 100000,
-    
+    "enable_auth" => env("SWAGGER_ENABLE_AUTH", true),
+    "username"    => env("SWAGGER_USERNAME"),
+    "password"    => env("SWAGGER_PASSWORD"),
+    "sesson_ttl"  => 100000,
+
     /*
     |--------------------------------------------------------------------------
     | Enable Response Schema

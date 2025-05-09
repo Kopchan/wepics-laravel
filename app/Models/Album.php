@@ -12,19 +12,25 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Kalnoy\Nestedset\NodeTrait;
 use phpDocumentor\Reflection\Types\Static_;
+use Staudenmeir\EloquentEagerLimit\HasEagerLimit;
 
 class Album extends Model
 {
-    use NodeTrait, HasFactory;
+    use NodeTrait, HasFactory;//, HasEagerLimit;
 
     // Поля для заполнения
     protected $fillable = [
         'name',
+        'alias',
         'path',
         'hash',
         'last_indexation',
         'parent_album_id',
         'guest_allow',
+        'age_rating_id',
+        'order_level',
+        'view_settings',
+        'natural_sort_key',
     ];
 
     public function getParentIdName() {
@@ -35,7 +41,34 @@ class Album extends Model
         'guest_allow' => 'boolean',
     ];
 
+    // Обработка событий модели
+    protected static function booted()
+    {
+        static::saving(function ($item) {
+            // Автоматически обновляем natural_sort_name при сохранении
+            $item->natural_sort_key = self::normalizeName($item?->name ?? '');
+        });
+    }
+
+
     // Функции
+
+    const MAX_SORT_KEY_LENGTH = 255;
+
+    // Генерация имени для натуральной сортировки
+    public static function normalizeName(string $originalName): string
+    {
+        // Нормализация чисел
+        $normalizedName = preg_replace_callback('/\d+/', function ($matches) {
+            return str_pad($matches[0], 12, '0', STR_PAD_LEFT);
+        }, $originalName);
+
+        $truncatedName = mb_substr($normalizedName, 0,self::MAX_SORT_KEY_LENGTH);
+
+        // Собираем итоговое имя
+        return iconv('UTF-8', 'UTF-8//IGNORE', $truncatedName);
+    }
+
     /**
      * Получение альбома по его уникальному хешу
      */
@@ -54,6 +87,34 @@ class Album extends Model
                     'path' => '/',
                     'hash' => 'root',
                 ]);
+        }
+        return $album;
+    }
+    /**
+     * Получение альбома по его уникальному хешу или алиасам
+     */
+    static public function getByHashOrAlias($hashOrAlias, $modifyQuery = null): Album
+    {
+        $query = Album::query();
+        if ($modifyQuery)
+            $modifyQuery($query);
+
+        if ($hashOrAlias !== 'root') {
+            $album = $query
+                ->where  ('hash' , $hashOrAlias)
+                ->orWhere('alias', $hashOrAlias)
+                ->first();
+
+            if (!$album)
+                throw new ApiException(404, "Album with \"$hashOrAlias\" not found");
+        }
+        else {
+            $album = $query->firstOrCreate([
+                'path' => '/'
+            ], [
+                'name' => '',
+                'hash' => 'root',
+            ]);
         }
         return $album;
     }
@@ -120,10 +181,13 @@ class Album extends Model
     public function getAccessLevelCached(User $user = null): AccessLevel
     {
         $cacheKey = static::buildAccessCacheKey($this->hash, $user?->id);
-
+        $result = null;
         if ($this->guest_allow) {
-            $result = AccessLevel::AsGuest; 
+            $result = AccessLevel::AsGuest;
             Cache::put($cacheKey, $result, static::ACCESS_CACHE_TTL);
+
+            //if ($cacheKey !== 'access:to=n3sUrEBC67fWOrZQ61hgfBrvH;for=')
+            //    dd($result, $cacheKey, Cache::get($cacheKey));
         }
 
         $result ??= Cache::get($cacheKey);
@@ -142,19 +206,19 @@ class Album extends Model
     }
     public static function getAccessLevelBatchById(int $albumId, int $userId = null): AccessLevel
     {
+        $result = AccessLevel::None;
         $ancestors = Album::reversed()->ancestorsAndSelf($albumId);
 
         if (count($ancestors) && $ancestors[0]->guest_allow)
             $result = AccessLevel::AsGuest;
 
-        if ($userId !== null)
+        if (!$result && $userId !== null)
             $rights = AccessRight
                 ::whereIn('album_id', $ancestors->pluck('id'))
                 ->where('user_id', $userId)
                 ->get();
 
         $passedAlbums = [];
-        $result = AccessLevel::None;
         foreach ($ancestors as $ancestor) {
             $passedAlbums[] = $ancestor;
             if ($userId === null && $ancestor->guest_allow === false) {
@@ -169,7 +233,7 @@ class Album extends Model
 
             if ($userId === null) continue;
 
-            $right = $rights->where(['album_id'])->first();
+            $right = isset($rights) ? $rights->where('album_id', $ancestor->id)->first() : null;
             if ($right === null) {
                 if ($ancestor->guest_allow === false) {
                     $result = AccessLevel::None;
@@ -179,7 +243,7 @@ class Album extends Model
             }
 
             $result = $right->allowed
-                ? AccessLevel::AsAllowedUser // AccessLevel::AsAllowedUser
+                ? AccessLevel::AsAllowedUser
                 : AccessLevel::None;
             break;
         }
@@ -199,14 +263,14 @@ class Album extends Model
         if ($result === null) {
             $album = Album::getByHash($albumHash);
 
-            if ($album->guest_allow) 
-                $result = AccessLevel::AsGuest; 
+            if ($album->guest_allow)
+                $result = AccessLevel::AsGuest;
 
             if (!$result)
                 $result = Album::getAccessLevelBatchById($album->id, $user?->id);
-            else 
+            else
                 Cache::put(static::buildAccessCacheKey($albumHash, $user?->id), $result, static::ACCESS_CACHE_TTL);
-            
+
         }
 
         if ($result === AccessLevel::None && $user?->is_admin) {

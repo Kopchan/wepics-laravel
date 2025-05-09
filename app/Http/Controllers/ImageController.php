@@ -235,33 +235,35 @@ class ImageController extends Controller
 
     public function showAll(AlbumImagesRequest $request, $albumHash)
     {
-        $album = Album::getByHash($albumHash);
+        $album = Album::getByHashOrAlias($albumHash);
         $user = $request->user();
         $accessLevel = $album->getAccessLevelCached($user);
         if ($accessLevel == AccessLevel::None)
             throw new ApiException(403, 'Forbidden for you');
 
-        $cacheKey = "albumIndexing:hash=$albumHash";
-        if (!Cache::get($cacheKey)) {
-            ImageController::indexingImages($album);
-            Cache::put($cacheKey, true, 43200);
-        };
+        //$cacheKey = "albumIndexing:hash=$albumHash";
+        //if (!Cache::get($cacheKey)) {
+        //    ImageController::indexingImages($album);
+        //    Cache::put($cacheKey, true, 43200);
+        //};
 
         $searchedTags = null;
         $tagsString = $request->tags;
         if ($tagsString)
             $searchedTags = explode(',', $tagsString);
 
-        $allowedSorts = array_column(SortType::cases(), 'value');
+        $allowedSorts = SortType::values();
         $sortType = $request->sort ?? $allowedSorts[0];
 
         $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
       //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
         $naturalSort = "natural_sort_key $sortDirection";
         $orderByRaw = match ($sortType) {
-            'name'  =>                                "$naturalSort",
-            'ratio' => "width / height $sortDirection, $naturalSort",
-            default =>      "$sortType $sortDirection, $naturalSort",
+            'name'   =>                                          $naturalSort,
+            'reacts' =>    "reactions_count" . " $sortDirection, $naturalSort",
+            'ratio'  =>     "width / height" . " $sortDirection, $naturalSort",
+            'square' => "ABS(GREATEST(width, height) / LEAST(width, height) - 1) $sortDirection, $naturalSort",
+            default  =>               "$sortType $sortDirection, $naturalSort",
         };
         $limit = intval($request->limit);
         if (!$limit)
@@ -278,7 +280,6 @@ class ImageController extends Controller
 
 
         if ($isNested) {
-
             foreach ($descendants as $descendant) {
                 switch ($descendant->getAccessLevelCached($user)) {
                     case AccessLevel::None:
@@ -297,10 +298,16 @@ class ImageController extends Controller
             }
         }
 
-        $dbQuery = $imagesFromDB = Image
+        $dbQuery = Image
             ::whereIn('album_id', $albumIds)
             ->with('tags', 'reactions')
             ->orderByRaw($orderByRaw);
+
+        if ($sortType === 'reacts')
+            $dbQuery->withCount('reactions');
+
+        //if ($isNested)
+        //    $dbQuery->with('album');
 
         $imagesFromDB = !$searchedTags
             ? $dbQuery->paginate($limit)
@@ -309,13 +316,22 @@ class ImageController extends Controller
         if ($isNested)
             foreach ($imagesFromDB as $image) {
                 $currentImageAlbum = $descendants?->where('id', $image->album_id)->first();
+                if (!$currentImageAlbum)
+                    continue;
+
                 $albumInfo = [];
-                if ($currentImageAlbum) {
+                $albumInfo['name'] = $currentImageAlbum->name;
+
+                if ($currentImageAlbum?->alias)
+                    $albumInfo['alias'] = $currentImageAlbum->alias;
+                else
                     $albumInfo['hash'] = $currentImageAlbum->hash;
-                    $albumInfo['name'] = $currentImageAlbum->name;
-                }
+
                 if ($currentImageAlbum?->sign)
                     $albumInfo['sign'] = $currentImageAlbum->sign;
+
+                if ($currentImageAlbum?->age_rating_id)
+                    $albumInfo['ratingId'] = $currentImageAlbum->age_rating_id;
 
                 $image->customAlbum = $albumInfo;
             }
@@ -337,7 +353,7 @@ class ImageController extends Controller
         )
             $response['sign'] = $album->getSign($user);
 
-            
+
         //dd(!$isNested, !$album->guest_allow, !!$user, $accessLevel != AccessLevel::AsGuest);
 
         //dd($user, $accessLevel, $accessLevel != AccessLevel::AsGuest, $response, $imagesFromDB->toArray());
@@ -354,6 +370,10 @@ class ImageController extends Controller
             (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
             !($sign && Album::checkSignStatic($albumHash, $sign))
         ) {
+            //[
+            //    'album' => $album,
+            //    'image' => $image,
+            //] = Image::getByHashOrAlias($albumHash, $imageHash);
             // Проверка доступа по токену в заголовках
             $image = Image::getByHash($albumHash, $imageHash);
             if (Album::getAccessLevelCachedByHash($albumHash, request()->user()) === AccessLevel::None)

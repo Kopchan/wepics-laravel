@@ -19,9 +19,7 @@ return new class extends Migration
 
     public function down()
     {
-        Schema::table('albums', function($table) {
-            $table->dropColumn('_lft');
-            $table->dropColumn('_rgt');
-        });
+        dropColumnIfExists('albums', '_lft');
+        dropColumnIfExists('albums', '_rgt');
     }
 };

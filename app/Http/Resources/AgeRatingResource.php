@@ -5,7 +5,7 @@ namespace App\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ReactionResource extends JsonResource
+class AgeRatingResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -15,7 +15,11 @@ class ReactionResource extends JsonResource
     public function toArray(Request $request)
     {
         return [
-            'value' => $this->value
+            'code' => $this->code,
+            'name' => $this->name,
+            'color' => $this->color,
+            'preset' => $this->preset,
+            'description' => $this->description,
         ];
     }
 }

@@ -7,6 +7,8 @@ use Monolog\Processor\PsrLogMessageProcessor;
 
 return [
 
+    'dbQueries' => env('LOG_DB_QUERIES', false),
+
     /*
     |--------------------------------------------------------------------------
     | Default Log Channel

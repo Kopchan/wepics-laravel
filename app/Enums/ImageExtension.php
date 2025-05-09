@@ -2,7 +2,12 @@
 
 namespace App\Enums;
 
-enum ImageExtension: string {
+use App\Traits\EnumValues;
+
+enum ImageExtension: string
+{
+    use EnumValues;
+
     case JPG  = 'jpg';
     case JPEG = 'jpeg';
     case PNG  = 'png';

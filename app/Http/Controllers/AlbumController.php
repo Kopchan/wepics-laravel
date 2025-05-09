@@ -3,15 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AccessLevel;
+use App\Enums\SortAlbumType;
 use App\Enums\SortType;
 use App\Exceptions\ApiException;
 use App\Http\Requests\AlbumCreateRequest;
-use App\Http\Requests\AlbumEditRequest;
+use App\Http\Requests\AlbumUpdateRequest;
 use App\Http\Requests\AlbumRequest;
+use App\Http\Resources\AlbumResource;
 use App\Http\Resources\ImageResource;
 use App\Models\Album;
+use App\Models\AlbumAlias;
 use App\Models\Image;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -62,7 +68,7 @@ class AlbumController extends Controller
         $user = request()->user();
 
         // Получение альбома из БД и проверка доступа пользователю
-        $targetAlbum = Album::getByHash($hash);
+        $targetAlbum = Album::getByHashOrAlias($hash);
         if ($targetAlbum->getAccessLevelCached($user) == AccessLevel::None)
             throw new ApiException(403, 'Forbidden for you');
 
@@ -72,7 +78,7 @@ class AlbumController extends Controller
 
         return response(null);
     }
-    public function get(AlbumRequest $request, $hash)
+    public function getLegacy(AlbumRequest $request, $hash)
     {
         // Получение пользователя
         $user = request()->user();
@@ -85,9 +91,11 @@ class AlbumController extends Controller
         //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
         $naturalSort = "natural_sort_key $sortDirection";
         $orderByRaw = match ($sortType) {
-            'name'  =>                                "$naturalSort",
-            'ratio' => "width / height $sortDirection, $naturalSort",
-            default =>      "$sortType $sortDirection, $naturalSort",
+            'name'       =>                                          $naturalSort,
+            'reacts'     =>    "reactions_count" . " $sortDirection, $naturalSort",
+            'ratio'      =>     "width / height" . " $sortDirection, $naturalSort",
+            'squareness' => "ABS(width / height - 1) $sortDirection, $naturalSort",
+            default      =>               "$sortType $sortDirection, $naturalSort",
         };
         $albumImagesJoin = intval($request->images);
         if (!$albumImagesJoin)
@@ -106,7 +114,7 @@ class AlbumController extends Controller
         $children = Album::where('parent_album_id', $targetAlbum->id)->withCount([
             'images',
             'childAlbums as albums_count'
-        ])->get();
+        ])->orderBy('order_level')->get();
 
         /*
         if ($user?->is_admin)
@@ -115,6 +123,13 @@ class AlbumController extends Controller
             $allowedChildren = $children->reject(fn ($child) => !$child->hasAccessCached($user));
         */
         $allowedChildren = collect();
+
+        //$keys = [];
+        //foreach ($children as $child) {
+        //    $keys[] = Album::buildAccessCacheKey($child->hash, $user?->id);
+        //}
+        //$values = Redis::mget($keys);
+        //dd($values, Cache::get(Album::buildSignCacheKey($children[0]->hash, $user?->id)),$keys);
 
         foreach ($children as $child) {
             $level = $child->getAccessLevelCached($user);
@@ -133,12 +148,18 @@ class AlbumController extends Controller
         }
 
         if ($albumImagesJoin)
-            foreach ($allowedChildren as $child)
-                $child['images'] = Image
+            foreach ($allowedChildren as $child) {
+                // TODO: eagle loading, please!
+                $query = Image
                     ::where('album_id', $child->id)
                     ->limit($albumImagesJoin)
-                    ->orderByRaw($orderByRaw)
-                    ->get();
+                    ->orderByRaw($orderByRaw);
+
+                if ($sortType === 'reacts')
+                    $query->withCount('reactions');
+
+                $child['images'] = $query->get();
+            }
 
         // Проход по родителям альбома для ответа (цепочка родителей)
         $parentsChain = [];
@@ -150,24 +171,27 @@ class AlbumController extends Controller
 
         // Компактный объект ответа
         $response = ['name' => $targetAlbum->name];
-        if ($targetAlbum->last_indexation)
-            $response['last_indexation'] = $targetAlbum->last_indexation;
+        if ($targetAlbum->order_level    ) $response['order_level'    ] = $targetAlbum->order_level;
+        if ($targetAlbum->albums_count   ) $response['albums_count'   ] = $targetAlbum->albums_count;
+        if ($targetAlbum->last_indexation) $response['last_indexation'] = $targetAlbum->last_indexation;
+        if ($targetAlbum->age_rating_id  ) $response['ratingId'] = $targetAlbum->age_rating_id;
 
         if (count($allowedChildren)) {
             foreach ($allowedChildren as $album) {
                 $childData = [
                     'hash' => $album->hash,
-                    'last_indexation' => $album->last_indexation,
                     'guest_allow' => $album->guest_allow,
                 ];
-                //if ($user && $limit && $album->getAccessLevelCached() != AccessLevel::AsGuest) $childData['sign'] = $album->getSign($user);
                 if ($album->sign) $childData['sign'] = $album->sign;
-                if ($album->albums_count) $childData['albums_count'] = $album->albums_count;
+                if ($album->age_rating_id  ) $childData['ratingId'       ] = $album->age_rating_id;
+                if ($album->order_level    ) $childData['order_level'    ] = $album->order_level;
+                if ($album->albums_count   ) $childData['albums_count'   ] = $album->albums_count;
+                if ($album->last_indexation) $childData['last_indexation'] = $album->last_indexation;
                 if ($album->images_count) {
                     $childData['images_count'] = $album->images_count;
                     if ($albumImagesJoin) $childData['images'] = ImageResource::collection($album->images);
                 }
-                $childrenRefined[$album->name] = $childData;
+                $childrenRefined[$album->name] = $childData; // $album->name убивает с одним и тем же именем объекты
             }
             $response['children'] = $childrenRefined;
         }
@@ -179,6 +203,153 @@ class AlbumController extends Controller
             $response['parentsChain'] = $parentsChainRefined;
         }
         return response($response);
+    }
+
+    public function get(AlbumRequest $request, $hash)
+    {
+        // Получение пользователя
+        $user = $request->user();
+
+        // Сортировка контента
+        $contentSortType = $request->sort ?? SortType::values()[0];
+        $contentSortTypeRaw = match ($contentSortType) {
+            'reacts' => "reactions_count",
+            'ratio'  =>     "width / height",
+            'square' => "ABS(GREATEST(width, height) / LEAST(width, height) - 1)",
+            default  => $contentSortType,
+        };
+        $contentSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
+        $contentNaturalSort   = "natural_sort_key $contentSortDirection";
+        $contentSort = match ($contentSortType) {
+            'name'  =>                                             $contentNaturalSort,
+            default => "$contentSortTypeRaw $contentSortDirection, $contentNaturalSort",
+        };
+
+        // Сортировка дочерних альбомов
+        $albumsSortType      = $request->sortAlbums ?? SortAlbumType::values()[0];
+        $albumsSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
+        $albumOrderLevel     = $request->has('disrespect') ? '' : 'order_level DESC, ';
+        $albumNaturalSort    = "natural_sort_key $albumsSortDirection";
+        $albumSort = match ($albumsSortType) {
+            'name'    =>                                           $albumNaturalSort,
+            'content' => "content_sort_field $albumsSortDirection, $albumNaturalSort",
+            'created' =>         "created_at $albumsSortDirection, $albumNaturalSort",
+            'images'  =>       "images_count $albumsSortDirection, $albumNaturalSort",
+            'albums'  =>       "albums_count $albumsSortDirection, $albumNaturalSort",
+            'indexed' =>    "last_indexation $albumsSortDirection, $albumNaturalSort",
+            default   =>    "$albumsSortType $albumsSortDirection, $albumNaturalSort",
+        };
+        $albumSort = $albumOrderLevel.$albumSort;
+
+        // Кол-во загружаемых картинок ко всем альбомам
+        if ($request->has('images'))
+            $imagesLimitJoin = intval($request->images) ?? 0;
+        else
+            $imagesLimitJoin = 4;
+
+        // Подзапрос для content_sort_field
+        $contentSortFieldSubquery = Image
+            ::whereColumn('album_id', 'albums.id')
+            ->orderByRaw("content_sort_field $contentSortDirection")
+            ->limit(1);
+
+        if ($contentSortType === 'reacts') {
+            $contentSortFieldSubquery
+                //->withCount('reactions as content_sort_field')
+                ->selectRaw(DB::raw(
+"(
+  select
+    count(*)
+  from
+    `reactions`
+    inner join `reaction_images` on `reactions`.`id` = `reaction_images`.`reaction_id`
+  where
+    `images`.`id` = `reaction_images`.`image_id`
+) as `content_sort_field`"
+                ));
+        }
+        else
+            $contentSortFieldSubquery
+                ->selectRaw("$contentSortTypeRaw as content_sort_field");
+
+        // Нужно ли подгружать дочерние альбомы?
+        $childrenIsRequired = !$request->has('simple');
+
+        // Вычисление того что подгрузить к альбому
+        $withCount = [
+            'images',
+            'childAlbums as albums_count',
+        ];
+        $withLoad = [
+            'ancestors',
+        ];
+        if ($childrenIsRequired)
+            $withLoad['childAlbums'] = fn($q) => $q
+                ->withCount($withCount)
+                ->withSum('images as size', 'size')
+                ->addSelect($albumsSortType === 'content' ? [
+                    'content_sort_field' => $contentSortFieldSubquery
+                ] : [])
+                ->orderByRaw($albumSort);
+
+        if ($imagesLimitJoin) {
+            $withLoad['images'] = fn($q) => $q
+                ->withCount($contentSortType === 'reacts' ? 'reactions' : [])
+                ->orderByRaw($contentSort)
+                ->limit($imagesLimitJoin);
+            // FIXME: медленнее, чем запрос картинок на каждом альбоме
+            //$withLoad['childAlbums.images'] = fn($q) => $q->orderByRaw($contentSort)->limit($imagesLimitJoin);
+        }
+
+        // Получение альбома из БД и проверка доступа пользователю
+        $targetAlbum = Album::getByHashOrAlias($hash, fn ($q) => $q
+            ->withCount($withCount)
+            ->withSum('images as size', 'size')
+            ->with($withLoad)
+        );
+
+        if ($targetAlbum->getAccessLevelCached($user) == AccessLevel::None)
+            throw new ApiException(403, 'Forbidden for you');
+
+        // Получение вложенных альбомов из БД если индексировалось, иначе индексировать
+        // TODO: мб добавить опцию через сколько времени надо переиндексировать?
+        if ($targetAlbum->last_indexation === null)
+            AlbumController::indexingAlbumChildren($targetAlbum);
+
+        // Проход по дочерним альбомам и запись сигнатур-токенов для получения картинок
+        foreach ($targetAlbum->childAlbums as $index => $child) {
+            $level = $child->getAccessLevelCached($user);
+            $hasImages = $child->images_count > 0;
+            switch ($level) {
+                case AccessLevel::None:
+                    $targetAlbum->childAlbums->forget($index);
+                    continue 2;
+
+                case AccessLevel::AsAllowedUser;
+                case AccessLevel::AsAdmin:
+                    if ($hasImages)
+                        $child['sign'] = $child->getSign($user);
+            }
+            if ($hasImages && $imagesLimitJoin) {
+                $query = Image
+                    ::where('album_id', $child->id)
+                    ->limit($imagesLimitJoin)
+                    ->orderByRaw($contentSort);
+
+                if ($contentSortType === 'reacts')
+                    $query->withCount('reactions');
+
+                // FIXME: быстрее, чем жадная загрузка
+                $child['imagesLoaded'] = $query->get();
+            }
+        }
+
+        // Проход по родителям альбома для ответа (цепочка родителей)
+        foreach ($targetAlbum->ancestors as $index => $ancestor)
+            if ($ancestor->getAccessLevelCached($user) === AccessLevel::None)
+                $targetAlbum->ancestors->forget($index);
+
+        return response(AlbumResource::make($targetAlbum));
     }
 
     public function create(AlbumCreateRequest $request, $hash)
@@ -202,15 +373,13 @@ class AlbumController extends Controller
         return response($newAlbum);
     }
 
-    public function rename(AlbumEditRequest $request, $hash)
+    public function update(AlbumUpdateRequest $request, $hash)
     {
         $album = Album::getByHash($hash);
-        $oldCustomName = (basename($album->path) != $album->name)
-            ? $album->name
-            : null;
 
-        $newFolderName = $request->name;
-        if ($newFolderName !== null && $newFolderName !== '') {
+        // Внутреннее имя (папки)
+        $newFolderName = $request->pathName;
+        if (!empty($newFolderName)) {
             $oldLocalPath = "images$album->path";
             $newPath = dirname($album->path) .'/'. $newFolderName .'/';
             $newLocalPath = "images$newPath";
@@ -221,10 +390,32 @@ class AlbumController extends Controller
             $album->path = $newPath;
         }
 
-        $album->name = $request->customName ?? $oldCustomName ?? $request->name ?? $album->name;
+        // Отображаемое имя
+        $oldDisplayName = (basename($album->path) != $album->name)
+            ? $album->name
+            : null;
+
+        $album->name = $request->displayName ?? $oldDisplayName ?? $request->name ?? $album->name;
+
+        // Имя в ссылке (алиас)
+        $oldAlias = $album->alias;
+        $newAlias = $request->urlName;
+        if ($request->has('urlName')) {
+            $album->alias = $newAlias;
+
+            if ($oldAlias) AlbumAlias::updateOrCreate(
+                ['name' => $oldAlias],
+                ['album_id' => $album->id],
+            );
+        }
+
+        if ($request->has('ageRatingId' )) $album->age_rating_id = $request->ageRatingId;
+        if ($request->has('orderLevel'  )) $album->order_level   = $request->orderLevel ?? 0;
+        if ($request->has('viewSettings')) $album->view_settings = $request->viewSettings;
+        if ($request->has('guestAllow'  )) $album->guest_allow   = $request->guestAllow;
 
         $album->save();
-        return response(null, 204);
+        return response(AlbumResource::make($album), 200);
     }
 
     public function delete($hash)

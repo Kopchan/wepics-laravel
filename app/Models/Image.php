@@ -6,16 +6,22 @@ use App\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Tags\HasTags;
+use Staudenmeir\EloquentEagerLimit\HasEagerLimit;
 
 class Image extends Model
 {
-    use HasFactory;
-    use HasTags;
+    use HasFactory, HasTags; //, HasEagerLimit;
 
     // Заполняемые поля
     protected $fillable = [
-        'name', 'hash', 'date', 'size',
-        'width', 'height', 'album_id',
+        'name',
+        'hash',
+        'date',
+        'size',
+        'width',
+        'height',
+        'album_id',
+        'age_rating_id',
     ];
 
     // Получение картинки по хешу
@@ -30,6 +36,22 @@ class Image extends Model
             throw new ApiException(404, "Image not found");
         return $image;
     }
+    // Получение картинки по хешу или алиасу
+    static public function getByHashOrAlias($albumHashOrAlias, $imageHash): array
+    {
+        $album = Album::getByHashOrAlias($albumHashOrAlias);
+        $image = Image
+            ::where('album_id', $album->id)
+            ->where('hash', $imageHash)
+            ->first();
+        if(!$image)
+            throw new ApiException(404, "Image not found");
+
+        return [
+            'album' => $album,
+            'image' => $image,
+        ];
+    }
 
     // Получение имя класса, управляющий тегами на этой модели
     public static function getTagClassName(): string {
@@ -41,7 +63,7 @@ class Image extends Model
     {
         static::saving(function ($item) {
             // Автоматически обновляем natural_sort_name при сохранении
-            $item->natural_sort_key = $item->normalizeName($item->name);
+            $item->natural_sort_key = self::normalizeName($item->name);
         });
     }
 

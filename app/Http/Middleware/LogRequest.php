@@ -12,6 +12,9 @@ class LogRequest
 {
     public function handle(Request $request, Closure $next)
     {
+        if (!config('logging.dbQueries', false))
+            $next($request);
+
         try {
             $method = strtoupper($request->getMethod());
             if (in_array($method, ['GET', 'PUT', 'PATCH', 'POST', 'DELETE']))
@@ -25,6 +28,9 @@ class LogRequest
 
     public function terminate(Request $request, $response)
     {
+        if (!config('logging.dbQueries', false))
+            return;
+
         try {
             $method = strtoupper($request->getMethod());
             if (!in_array($method, ['GET', 'PUT', 'PATCH', 'POST', 'DELETE']))

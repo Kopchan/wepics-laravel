@@ -3,113 +3,101 @@
 namespace Database\Seeders;
 
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\AgeRating;
 use App\Models\Reaction;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 
 class DatabaseSeeder extends Seeder
 {
+    protected static function insertIfNotExists($model, array $uniqueKeys, array $rows)
+    {
+        foreach ($rows as $row) {
+            $query = $model::query();
+
+            // Добавляем условия для проверки уникальности
+            foreach ($uniqueKeys as $key) {
+                if (!array_key_exists($key, $row)) {
+                    throw new \InvalidArgumentException("Key `{$key}` not found in row");
+                }
+                $query->where($key, $row[$key]);
+            }
+
+            // Если запись не найдена — вставляем
+            if (!$query->exists()) {
+                $model::create($row);
+            }
+        }
+    }
     public function run(): void
     {
-        User::create([
-            'nickname' => 'Administrator',
-            'login'    => 'admin',
-            'password' => 'admin123',
-            'is_admin' => true,
+        self::insertIfNotExists(User::class, ['login'], [
+            [
+                'nickname' => 'Administrator',
+                'login'    => 'admin',
+                'password' => 'admin123',
+                'is_admin' => true,
+            ],
         ]);
 
-        Reaction::insert([
+        self::insertIfNotExists(AgeRating::class, ['code', 'name'], [
+            [
+                'code' => 'G',
+                'name' => 'General',
+                'description' => 'Anybody can view',
+                'color' => '#00a74f',
+                'level' => 10,
+                'preset' => 'show',
+            ],
+            [
+                'code' => 'PG12',
+                'name' => 'Parental Guidance 12',
+                'description' => 'Mild violence or hints of romance',
+                'color' => '#00afef',
+                'level' => 20,
+                'preset' => 'show',
+            ],
+            [
+                'code' => 'R15',
+                'name' => 'Restricted 15+',
+                'description' => 'More explicit scenes, blood, moderate violence',
+                'color' => '#ed008d',
+                'level' => 30,
+                'preset' => 'blur',
+            ],
+            [
+                'code' => 'R18',
+                'name' => 'Restricted 18+',
+                'description' => 'Explicit sex, cruelty',
+                'color' => '#ee151f',
+                'level' => 40,
+                'preset' => 'blur',
+            ],
+            [
+                'code' => 'R18G',
+                'name' => 'Restricted 18+ Graphic',
+                'description' => 'Extremely shocking or explicitly violent content',
+                'color' => '#5915eb',
+                'level' => 50,
+                'preset' => 'hide',
+            ],
+        ]);
+
+        self::insertIfNotExists(Reaction::class, ['value'], [
             ['value' => '👍'],
             ['value' => '👎'],
             ['value' => '⚡'],
-            ['value' => '🎉'],
+            ['value' => '✨'],
             ['value' => '❤️'],
-            ['value' => '🥵'],
-            ['value' => '🥛'],
+            ['value' => '📌'],
+            ['value' => '🎉'],
+            ['value' => '💀'],
+            ['value' => '🍗'],
+            ['value' => '👀'],
+            ['value' => '🌚'],
+            ['value' => '🫣'],
+            ['value' => '🤨'],
+            ['value' => '🤤'],
         ]);
-
-        DB::unprepared("DROP FUNCTION IF EXISTS `udf_FirstNumberPos`");
-        DB::unprepared("
-            CREATE FUNCTION `udf_FirstNumberPos` (`instring` varchar(4000))
-            RETURNS int
-            LANGUAGE SQL
-            DETERMINISTIC
-            NO SQL
-            SQL SECURITY INVOKER
-            BEGIN
-                DECLARE position int;
-                DECLARE tmp_position int;
-                SET position = 5000;
-                SET tmp_position = LOCATE('0', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('1', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('2', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('3', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('4', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('5', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('6', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('7', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('8', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-                SET tmp_position = LOCATE('9', instring); IF (tmp_position > 0 AND tmp_position < position) THEN SET position = tmp_position; END IF;
-
-                IF (position = 5000) THEN RETURN 0; END IF;
-                RETURN position;
-            END
-        ");
-        DB::unprepared("DROP FUNCTION IF EXISTS `udf_NaturalSortFormat`");
-        DB::unprepared("
-            CREATE FUNCTION `udf_NaturalSortFormat` (`instring` varchar(4000), `numberLength` int, `sameOrderChars` char(50))
-            RETURNS varchar(4000)
-            LANGUAGE SQL
-            DETERMINISTIC
-            NO SQL
-            SQL SECURITY INVOKER
-            BEGIN
-                DECLARE sortString varchar(4000);
-                DECLARE numStartIndex int;
-                DECLARE numEndIndex int;
-                DECLARE padLength int;
-                DECLARE totalPadLength int;
-                DECLARE i int;
-                DECLARE sameOrderCharsLen int;
-
-                SET totalPadLength = 0;
-                SET instring = TRIM(instring);
-                SET sortString = instring;
-                SET numStartIndex = udf_FirstNumberPos(instring);
-                SET numEndIndex = 0;
-                SET i = 1;
-                SET sameOrderCharsLen = CHAR_LENGTH(sameOrderChars);
-
-                WHILE (i <= sameOrderCharsLen) DO
-                    SET sortString = REPLACE(sortString, SUBSTRING(sameOrderChars, i, 1), ' ');
-                    SET i = i + 1;
-                END WHILE;
-
-                WHILE (numStartIndex <> 0) DO
-                    SET numStartIndex = numStartIndex + numEndIndex;
-                    SET numEndIndex = numStartIndex;
-
-                    WHILE (udf_FirstNumberPos(SUBSTRING(instring, numEndIndex, 1)) = 1) DO
-                        SET numEndIndex = numEndIndex + 1;
-                    END WHILE;
-
-                    SET numEndIndex = numEndIndex - 1;
-
-                    SET padLength = numberLength - (numEndIndex + 1 - numStartIndex);
-
-                    IF padLength < 0 THEN
-                        SET padLength = 0;
-                    END IF;
-
-                    SET sortString = INSERT(sortString, numStartIndex + totalPadLength, 0, REPEAT('0', padLength));
-
-                    SET totalPadLength = totalPadLength + padLength;
-                    SET numStartIndex = udf_FirstNumberPos(RIGHT(instring, CHAR_LENGTH(instring) - numEndIndex));
-                END WHILE;
-
-                RETURN sortString;
-            END
-        ");
     }
 }

@@ -35,16 +35,13 @@ return new class extends Migration
                     ->change();
             });
         } catch (\Exception $e) {
-            Schema::table('albums', function($table) {
-                $table->dropColumn('guest_allow');
-            });
+            $this->down();
+            throw $e;
         }
     }
 
     public function down()
     {
-        Schema::table('albums', function($table) {
-            $table->dropColumn('guest_allow');
-        });
+        dropColumnIfExists('albums', 'guest_allow');
     }
 };

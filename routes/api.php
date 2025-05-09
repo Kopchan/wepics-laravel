@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\AlbumController;
@@ -18,6 +19,14 @@ use App\Http\Controllers\ReactionController;
 | be assigned to the "api" middleware group. Make something great!
 |
 */
+
+Route
+::controller(SettingsController::class)
+->group(function ($settings) {
+    $settings->get('',       'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки
+    $settings->get('setups', 'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки 2
+});
+
 
 Route
 ::controller(UserController::class)
@@ -44,11 +53,12 @@ Route
 ->controller(AlbumController::class)
 ->prefix('albums/{album_hash}')
 ->group(function ($album) {
-    $album->get('', 'get');
+    $album->get('', 'getLegacy');
+    $album->get('info', 'get');
     $album->get('reindex', 'reindex');
     $album->middleware('token.auth:admin')->group(function ($albumManage) {
         $albumManage->post  ('', 'create');
-        $albumManage->patch ('', 'rename');
+        $albumManage->patch ('', 'update');
         $albumManage->delete('', 'delete');
     });
     $album

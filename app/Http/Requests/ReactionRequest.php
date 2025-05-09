@@ -9,7 +9,7 @@ class ReactionRequest extends ApiRequest
     public function rules(): array
     {
         return [
-            'reactions'=>'required|array'
+            'reactions' => 'required|array'
         ];
     }
 }

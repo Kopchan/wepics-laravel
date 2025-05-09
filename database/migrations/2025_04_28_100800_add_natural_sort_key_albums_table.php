@@ -12,18 +12,18 @@ return new class extends Migration
     public function up()
     {
         try {
-            Schema::table('images', function (Blueprint $table) {
+            Schema::table('albums', function (Blueprint $table) {
                 $table->string('natural_sort_key', 255)->nullable();
             });
 
-            DB::table('images')->get()->each(function ($image) {
-                $normalizedName = Image::normalizeName($image->name);
-                DB::table('images')
-                    ->where('id', $image->id)
+            DB::table('albums')->get()->each(function ($album) {
+                $normalizedName = Album::normalizeName($album->name);
+                DB::table('albums')
+                    ->where('id', $album->id)
                     ->update(['natural_sort_key' => $normalizedName]);
             });
 
-            Schema::table('images', function (Blueprint $table) {
+            Schema::table('albums', function (Blueprint $table) {
                 $table->string('natural_sort_key', 255)->nullable(false)->change();
             });
         }
@@ -35,6 +35,6 @@ return new class extends Migration
 
     public function down()
     {
-        dropColumnIfExists('images', 'natural_sort_key');
+        dropColumnIfExists('albums', 'natural_sort_key');
     }
 };
