@@ -256,17 +256,12 @@ class AlbumController extends Controller
         if ($contentSortType === 'reacts') {
             $contentSortFieldSubquery
                 //->withCount('reactions as content_sort_field')
-                ->selectRaw(DB::raw(
-"(
-  select
-    count(*)
-  from
-    `reactions`
-    inner join `reaction_images` on `reactions`.`id` = `reaction_images`.`reaction_id`
-  where
-    `images`.`id` = `reaction_images`.`image_id`
-) as `content_sort_field`"
-                ));
+                ->selectRaw(DB::raw('('
+                .  'select count(*)'
+                .  'from `reactions`'
+                .  'inner join `reaction_images` on `reactions`.`id` = `reaction_images`.`reaction_id`'
+                .  'where `images`.`id` = `reaction_images`.`image_id`'
+                .') as `content_sort_field`'));
         }
         else
             $contentSortFieldSubquery
@@ -345,9 +340,27 @@ class AlbumController extends Controller
         }
 
         // Проход по родителям альбома для ответа (цепочка родителей)
-        foreach ($targetAlbum->ancestors as $index => $ancestor)
-            if ($ancestor->getAccessLevelCached($user) === AccessLevel::None)
-                $targetAlbum->ancestors->forget($index);
+        //foreach ($targetAlbum->ancestors->reverse() as $index => $ancestor)
+        //    if ($ancestor->getAccessLevelCached($user) === AccessLevel::None) {
+        //        $targetAlbum->ancestors->forget($index);
+        //        dd($ancestor);
+        //        break;
+        //    }
+
+        $ancestors = $targetAlbum->ancestors;
+        $cutIndex = null;
+
+        foreach ($ancestors as $index => $ancestor) {
+            if ($ancestor->getAccessLevelCached($user) === AccessLevel::None) {
+                $cutIndex = $index;
+                break;
+            }
+        }
+
+        if (!is_null($cutIndex)) {
+            // Обрезаем предков, начиная со следующего после первого "None"
+            $targetAlbum->ancestors = $ancestors->slice($cutIndex + 1);
+        }
 
         return response(AlbumResource::make($targetAlbum));
     }

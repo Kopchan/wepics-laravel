@@ -185,4 +185,17 @@ return [
         // 'Example' => App\Facades\Example::class,
     ])->toArray(),
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | trusted proxies
+    |--------------------------------------------------------------------------
+    |
+    | The trusted proxies for this application
+    | For
+    |
+    */
+
+    'proxies' =>  explode(',', env('TRUSTED_PROXIES', '')),
+
 ];

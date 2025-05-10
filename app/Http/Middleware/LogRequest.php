@@ -50,14 +50,21 @@ class LogRequest
             }
 
             $code = $response->getStatusCode();
-            $sign = $response->isSuccessful() ? "🟢" : "🔴";
+            $sign = $response->isRedirection()      ? "🔵" : (
+                $response->isInformational()        ? "🟣" : (
+                    $response->isSuccessful()       ? "🟢" : (
+                        $response->isClientError()  ? "🟡" : "🔴"
+                    )
+                )
+            );
 
-            $uri    = $request->getPathInfo();
+            $uri = $request->getPathInfo();
+            $ip = str_pad($request->ip(), 16);
 
             $origin = $request->header('Origin')
                    ?? $request->header('Host')
                    ?? $request->header('Referer')
-                   ?? "NO_ORIGIN";
+                   ?? "NO_ORIGIN ";
 
             $userId = $request->user()?->id ??
                 ($request->has('sign')
@@ -74,7 +81,7 @@ class LogRequest
             $browser  = str_pad($agent->browser() , 10);
 
             $reqQuery = $request->getQueryString();
-            $message = "$sign $code $method\t👤$userId 📱$device 📦$platform 🌍$browser $origin $uri"
+            $message = "$sign $code $method\t👤$ip 🆔$userId 📱$device 📦$platform 🌍$browser $origin$uri"
                 . ($reqQuery ? "?$reqQuery" : '')
                 . (!empty($dbQueryStrings) ? "\n" : '')
                 . implode('', $dbQueryStrings);

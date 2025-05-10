@@ -19,7 +19,7 @@ class StoreIndex extends Command
 {
     protected $signature = 'app:index {--s|start-from=} {--d|auto-destroy}';
 
-    protected $description = 'Command description';
+    protected $description = 'Index root album for new albums/images and remove if not found';
 
     public function formatNumber($number, $pad = 6, $fg = 'white') {
         $padString = str_pad($number, $pad, '0', STR_PAD_LEFT);
@@ -125,7 +125,8 @@ class StoreIndex extends Command
                         'path' => $childPath,
                         'hash' => $hash,
                     ]);
-                    $childAlbum->parent_album_id = $currentAlbum->id;
+                    $childAlbum->appendToNode($currentAlbum);
+                    //$childAlbum->parent_album_id = $currentAlbum->id;
                     $childAlbum->save();
                     $newAlbums[] = $childAlbum;
                     $this->info('<fg=green>+ '

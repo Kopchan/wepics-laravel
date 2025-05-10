@@ -27,6 +27,12 @@ Route
     $settings->get('setups', 'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки 2
 });
 
+Route::any('who', function () {
+    return [
+        'service' => 'Wepics',
+        'appname' => config('app.name'),
+    ];
+});
 
 Route
 ::controller(UserController::class)

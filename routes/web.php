@@ -13,11 +13,4 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::view('/', 'index')->name('home');
-
-Route::any('/who', function () {
-    return [
-        'service' => 'Wepics',
-        'appname' => config('app.name'),
-    ];
-});
+Route::view('/{any?}', 'index')->where('any', '.*')->name('home');
