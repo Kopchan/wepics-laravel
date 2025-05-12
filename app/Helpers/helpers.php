@@ -13,10 +13,25 @@ if (!function_exists('dropColumnIfExists')) {
     }
 }
 
+if (!function_exists('base64url_encode')) {
+    function base64url_encode($data) {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+}
+
+if (!function_exists('base64url_decode')) {
+    function base64url_decode($data) {
+        return base64_decode(str_pad(strtr($data, '-_', '+/'), strlen($data) % 4, '=', STR_PAD_RIGHT));
+    }
+}
+
+
+
 if (!function_exists('bytesToHuman')) {
     function bytesToHuman(int $bytes): string
     {
-        $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+        //$units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+        $units = ['B', 'K', 'M', 'G', 'T', 'P'];
 
         $bytes = max($bytes, 0);
 
@@ -27,7 +42,35 @@ if (!function_exists('bytesToHuman')) {
 
         $formatted = number_format($bytes, 3 - strlen(floor($bytes)), '.', '');
 
-        return $formatted . ' ' . $units[$pow];
+        return $formatted . $units[$pow];
+    }
+}
+
+if (!function_exists('countToHuman')) {
+    function countToHuman(int $count): string
+    {
+        $units = ['', 'K', 'M', 'B', 'T', 'Q'];
+
+        if ($count <= 0) {
+            return '0';
+        }
+
+        $pow = min(
+            floor(log($count, 1000)),
+            count($units) - 1
+        );
+
+        $value = $count / pow(1000, $pow);
+
+        if (fmod($value, 1.0) === 0.0) {
+            $formatted = number_format($value, 0, '.', '');
+        } else {
+            $precision = 3 - floor(log10($value) + 1);
+            $precision = max(0, $precision);
+            $formatted = number_format($value, $precision, '.', '');
+        }
+
+        return $formatted . $units[$pow];
     }
 }
 

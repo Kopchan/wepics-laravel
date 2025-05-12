@@ -21,16 +21,16 @@ class StoreIndex extends Command
 
     protected $description = 'Index root album for new albums/images and remove if not found';
 
-    public function formatNumber($number, $pad = 6, $fg = 'white') {
+    public static function formatNumber($number, $pad = 6, $fg = 'white') {
         $padString = str_pad($number, $pad, '0', STR_PAD_LEFT);
         return preg_replace('/^(0*)(\d+)$/', "<fg=gray>$1</><fg=$fg>$2</>", $padString);
     }
 
-    public function counter($position, $count, $pad = 6, $fg = 'yellow', $fgCount = 'white') {
+    public static function counter($position, $count, $pad = 6, $fg = 'yellow', $fgCount = 'white') {
         return
-            $this->formatNumber($position, $pad, $fg)
+            static::formatNumber($position, $pad, $fg)
             .'/'.
-            $this->formatNumber($count, $pad, $fgCount);
+            static::formatNumber($count, $pad, $fgCount);
     }
 
     public function handle(): void
@@ -73,8 +73,8 @@ class StoreIndex extends Command
             $path = Storage::path("images$currentAlbum->path");
 
             $currentAlbumKey++;
-            $this->line('<fg=gray;options=bold>['.$this->counter($currentAlbumKey, $albums->count())
-                .']  #' . $this->formatNumber($currentAlbum->id)
+            $this->line('<fg=gray;options=bold>['.static::counter($currentAlbumKey, $albums->count())
+                .']  #' . static::formatNumber($currentAlbum->id)
                 ."  <fg=yellow;options=bold>$currentAlbum->name</> "
                 ." <bg=black;fg=white;href=". url('../album/'. $currentAlbum->hash) ."> 🌐 ".($currentAlbum->alias ?? $currentAlbum->hash)." </> "
                 ." <bg=gray;fg=black;href=file:///$path> 📁 $currentAlbum->path </></> "
@@ -98,6 +98,7 @@ class StoreIndex extends Command
 
             //$childrenInDB = $album->childAlbums->toArray();
             $albumChildren = $albums->where('parent_album_id', $currentAlbum->id);
+            //$keysToForget = [];
             // Проход по папкам альбома (дочерние альбомы)
             $this->line('Checking folders in album ['
                 . count($folders) .' in FS / '
@@ -116,6 +117,7 @@ class StoreIndex extends Command
                         "  <fg=gray;href=". url("../album/$albumChild->hash") .">$albumChild->hash</> "
                         ."<fg=gray;href=file:///". Storage::path("images$childPath") .">$basename/</> "
                     );
+                    //$keysToForget[] = $key;
                     $albumChildren->forget($key);
                 }
                 else {
@@ -135,6 +137,7 @@ class StoreIndex extends Command
                     );
                 }
             }
+            //dd($keysToForget, $albumChildren->toArray());
             foreach ($albumChildren as $key => $notFoundedAlbum) {
                 $this->line('<fg=red>- '
                     ."<fg=red;href=". url("../album/$notFoundedAlbum->hash") .">$notFoundedAlbum->hash</> "
@@ -202,7 +205,7 @@ class StoreIndex extends Command
             // Проход по файлам
             foreach ($files as $i => $file) {
                 $name = basename($file);
-                $counter = '['.$this->counter($i+1, $filesCount).']';
+                $counter = '['.static::counter($i+1, $filesCount).']';
                 $this->output->write("  $counter <href=file:///$file>$name</>");
 
                 try {
@@ -244,7 +247,7 @@ class StoreIndex extends Command
                     }
 
                     // Получение хеша картинки (прожорливое к скорости чтения)
-                    $hash = hash_file('xxh3', $file);
+                    $hash = base64url_encode(hash_file('xxh3', $file, true));
 
                     // Проверка наличия в БД картинки по хешу, если есть — проверяем в ФС
                     $key = array_search($hash, $imagesHashes);
@@ -255,7 +258,7 @@ class StoreIndex extends Command
                         // Проверка наличие картинки-оригинала в ФС ...
                         $filesKey = array_search($imageFullName, $files);
                         if ($filesKey === false) {
-                            // Если нету — переименовываем в БД
+                            // Если нет — переименовываем в БД
                             Image
                                 ::where('id', $images[$key]['id'])
                                 ->update(['name' => $name]);
@@ -343,7 +346,7 @@ class StoreIndex extends Command
 
                 try {
                     $this->line("<fg=red>\r- "
-                        .'['.$this->counter(0, $filesCount).'] '
+                        .'['.static::counter(0, $filesCount).'] '
                         .($isDuplica ? '' : '<fg=gray;href='
                             . url("api/albums/$notFoundedImage[hash]/images/$notFoundedImage[hash]/orig")
                             .">$notFoundedImage[hash]</> "

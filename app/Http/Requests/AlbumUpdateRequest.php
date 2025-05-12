@@ -25,7 +25,7 @@ class AlbumUpdateRequest extends ApiRequest
                 'nullable',
                 'string',
                 'min:1',
-                'regex:/^[A-Za-z0-9-_]+$/',
+                'regex:/^[A-Za-z0-9-]+$/',
                 Rule::unique(Album::class, 'alias')->ignore($album?->id),
             ],
             'ageRatingId'   => [

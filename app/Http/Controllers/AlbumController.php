@@ -14,12 +14,14 @@ use App\Http\Resources\ImageResource;
 use App\Models\Album;
 use App\Models\AlbumAlias;
 use App\Models\Image;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Spatie\Browsershot\Browsershot;
 
 class AlbumController extends Controller
 {
@@ -443,5 +445,58 @@ class AlbumController extends Controller
 
         $album->delete();
         return response(null, 204);
+    }
+
+    public function og()
+    {
+        return 'nothing';
+    }
+
+    public function ogView($hashOrAlias)
+    {
+        $album = Album::getByHashOrAlias($hashOrAlias, fn ($q) => $q
+            ->withSum('images as size', 'size')
+            ->withCount([
+                'images',
+                'childAlbums as albums_count',
+            ])
+            ->with([
+                'images' => fn ($q) => $q->limit(20)->orderByDesc('date'),
+            ])
+        );
+        if ($album->getAccessLevelCached() === AccessLevel::None)
+            throw new ApiException(403, 'Access denied');
+
+        $total = 0;
+        $count = count($album->images);
+        foreach ($album->images as $image)
+            $total += $image->ratio = $image->width / $image->height;
+
+        $album->avgRatio = $count > 0 ? $total / $count : 0;
+
+        return view('album', compact('album'));
+    }
+
+    public function ogImage($hashOrAlias) {
+        $path = storage_path("app/og/{$hashOrAlias}.png");
+
+        // Если файл уже существует и не устарел — возвращаем его
+        if (file_exists($path) && now()->diffInMinutes(Carbon::createFromTimestamp(filemtime($path))) < 60) {
+            return response()->file($path, ['Content-Type' => 'image/png']);
+        }
+
+        // Генерация HTML
+        $html = $this->ogView($hashOrAlias)->render();
+
+        // Убедитесь, что директория существует
+        if (!file_exists(dirname($path)))
+            mkdir(dirname($path), 0755, true);
+
+        // Генерация и сохранение скриншота
+        Browsershot::html($html)
+            ->windowSize(1200, 1200)
+            ->save($path);
+
+        return response()->file($path, ['Content-Type' => 'image/png']);
     }
 }

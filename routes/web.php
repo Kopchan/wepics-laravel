@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ViewController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -13,4 +14,11 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::view('/{any?}', 'index')->where('any', '.*')->name('home');
+Route::controller(ViewController::class)->group(function ($view) {
+    $view->view('',                              'index')->name('home');
+    $view->get ('{album}',                       'album')->name('album');
+    $view->get ('{album}/i/{image}',             'image');
+    $view->get ('{album}/{trueAlbum}/i/{image}', 'imageNested');
+    $view->view('{any?}', 'index')->where('any', '.*')->name('any');
+});
+

@@ -319,13 +319,13 @@ class ImageController extends Controller
                 if (!$currentImageAlbum)
                     continue;
 
-                $albumInfo = [];
-                $albumInfo['name'] = $currentImageAlbum->name;
+                $albumInfo = [
+                    'name' => $currentImageAlbum->name,
+                    'hash' => $currentImageAlbum->hash,
+                ];
 
                 if ($currentImageAlbum?->alias)
                     $albumInfo['alias'] = $currentImageAlbum->alias;
-                else
-                    $albumInfo['hash'] = $currentImageAlbum->hash;
 
                 if ($currentImageAlbum?->sign)
                     $albumInfo['sign'] = $currentImageAlbum->sign;
@@ -381,7 +381,8 @@ class ImageController extends Controller
         }
 
         // Проверка наличия превью в файлах
-        $thumbPath = "thumbs/$imageHash-$orientation$size.webp";
+        $dirname = "thumbs/$orientation$size";
+        $thumbPath = "$dirname/$imageHash.webp";
         if (!Storage::exists($thumbPath)) {
             // Проверка запрашиваемого размера и редирект, если не прошло
             $askedSize = $size;
@@ -401,26 +402,28 @@ class ImageController extends Controller
                 ])->header('Cache-Control', ['max-age=86400', 'private']);;
 
             // Проверка наличия превью в файлах x2
-            $thumbPath = "thumbs/$imageHash-$orientation$size.webp";
-            if (!Storage::exists($thumbPath)) {
-                // Создание превью
-                $image = $image ?? Image::getByHash($albumHash, $imageHash);
+            //$dirname = "thumbs/$orientation$size";
+            //$thumbPath = "$dirname/$imageHash.webp";
+            //if (!Storage::exists($thumbPath)) {
+            //}
 
-                $imagePath = Storage::path('images'. $image->album->path . $image->name);
+            // Создание превью
+            $image = $image ?? Image::getByHash($albumHash, $imageHash);
 
-                $thumb = Intervention::read($imagePath);
+            $imagePath = Storage::path('images'. $image->album->path . $image->name);
 
-                if ($orientation == 'w')
-                    $thumb->scale(width: $size);
-                else
-                    $thumb->scale(height: $size);
+            $thumb = Intervention::read($imagePath);
 
-                if (!Storage::exists('thumbs'))
-                    Storage::makeDirectory('thumbs');
+            if ($orientation == 'w')
+                $thumb->scale(width: $size);
+            else
+                $thumb->scale(height: $size);
 
-                $thumb->toWebp(90)->save(Storage::path($thumbPath));
-                unset($thumb);
-            }
+            if (!Storage::exists($dirname))
+                Storage::makeDirectory($dirname);
+
+            $thumb->toWebp(90)->save(Storage::path($thumbPath));
+            unset($thumb);
         }
         return response()->file(Storage::path($thumbPath), ['Cache-Control' => ['max-age=86400', 'private']]);
     }
@@ -443,12 +446,13 @@ class ImageController extends Controller
             !($sign && Album::checkSignStatic($albumHash, $sign))
         ) {
             // Проверка доступа по токену в заголовках
-            $image = Image::getByHash($albumHash, $imageHash);
+            $image = Image::getByHashOrAlias($albumHash, $imageHash);
             if ($image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
                 throw new ApiException(403, 'Forbidden for you');
         }
-        $image = $image ?? Image::getByHash($albumHash, $imageHash);
+        $image ??= Image::getByHashOrAlias($albumHash, $imageHash);
         $path = Storage::path('images'. $image->album->path . $image->name);
+        //dd(base64url_encode(hash_file('xxh3', $path, true)));
         ob_end_clean();
         return response()->file($path);
     }
@@ -499,7 +503,7 @@ class ImageController extends Controller
         $imagePath = 'images'. $image->album->path . $image->name;
         Storage::delete($imagePath);
 
-        $thumbPath = "thumbs/$image->hash-*";
+        $thumbPath = "thumbs/*/$image->hash*";
         File::delete(File::glob(Storage::path($thumbPath)));
 
         $image->delete();

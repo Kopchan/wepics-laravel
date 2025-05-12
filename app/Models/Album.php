@@ -261,7 +261,7 @@ class Album extends Model
         $result = Cache::get($cacheKey);
 
         if ($result === null) {
-            $album = Album::getByHash($albumHash);
+            $album = Album::getByHashOrAlias($albumHash);
 
             if ($album->guest_allow)
                 $result = AccessLevel::AsGuest;

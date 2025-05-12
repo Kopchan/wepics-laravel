@@ -37,7 +37,7 @@ class Image extends Model
         return $image;
     }
     // Получение картинки по хешу или алиасу
-    static public function getByHashOrAlias($albumHashOrAlias, $imageHash): array
+    static public function getByHashOrAlias($albumHashOrAlias, $imageHash): Image
     {
         $album = Album::getByHashOrAlias($albumHashOrAlias);
         $image = Image
@@ -47,10 +47,9 @@ class Image extends Model
         if(!$image)
             throw new ApiException(404, "Image not found");
 
-        return [
-            'album' => $album,
-            'image' => $image,
-        ];
+        $image->album = $album;
+
+        return $image;
     }
 
     // Получение имя класса, управляющий тегами на этой модели
