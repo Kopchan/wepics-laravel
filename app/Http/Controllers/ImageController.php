@@ -259,12 +259,20 @@ class ImageController extends Controller
       //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
         $naturalSort = "natural_sort_key $sortDirection";
         $orderByRaw = match ($sortType) {
-            'name'   =>                                          $naturalSort,
-            'reacts' =>    "reactions_count" . " $sortDirection, $naturalSort",
-            'ratio'  =>     "width / height" . " $sortDirection, $naturalSort",
-            'square' => "ABS(GREATEST(width, height) / LEAST(width, height) - 1) $sortDirection, $naturalSort",
-            default  =>               "$sortType $sortDirection, $naturalSort",
+            'reacts'     => "reactions_count",
+            'ratio'      => "width / height",
+            'square'     => "ABS(GREATEST(width, height) / LEAST(width, height) - 1)",
+            'frames'     => "frames_count IS NULL, frames_count",
+            'duration'   => "duration_ms IS NULL, duration_ms",
+            'framerate'  => "avg_frame_rate_den IS NULL, avg_frame_rate_num / avg_frame_rate_den",
+            'bitrate'    => "duration_ms IS NULL, size * 8 / duration_ms * 1000",
+            default      => $sortType,
         };
+        $orderByRaw = match ($sortType) {
+            'name'  => $naturalSort,
+            default => "$orderByRaw $sortDirection, $naturalSort",
+        };
+        //dd($orderByRaw, $sortDirection);
         $limit = intval($request->limit);
         if (!$limit)
             $limit = 30;
@@ -278,11 +286,17 @@ class ImageController extends Controller
             $isNested = !!$descendants->count();
         }
 
-
+        $deniedAlbumIds = [];
         if ($isNested) {
             foreach ($descendants as $descendant) {
+                if (in_array($descendant->parent_album_id, $deniedAlbumIds)) {
+                    $deniedAlbumIds[] = $descendant->id; // Текущий тоже недоступен
+                    continue;
+                }
+
                 switch ($descendant->getAccessLevelCached($user)) {
                     case AccessLevel::None:
+                        $deniedAlbumIds[] = $descendant->id;
                         break;
 
                     case AccessLevel::AsAllowedUser;
@@ -340,6 +354,9 @@ class ImageController extends Controller
             'page'     => $imagesFromDB->currentPage(),
             'per_page' => $imagesFromDB->perPage(),
             'total'    => $imagesFromDB->total(),
+            'test' => [
+                $orderByRaw
+            ],
             'pictures' => !$isNested
                 ? ImageResource    ::collection($imagesFromDB->items())
                 : ImageLinkResource::collection($imagesFromDB->items()),
@@ -412,18 +429,23 @@ class ImageController extends Controller
 
             $imagePath = Storage::path('images'. $image->album->path . $image->name);
 
-            $thumb = Intervention::read($imagePath);
+            if ($image->type === 'image' || $image->type === 'imageAnimated') {
+                $thumb = Intervention::read($imagePath);
 
-            if ($orientation == 'w')
-                $thumb->scale(width: $size);
-            else
-                $thumb->scale(height: $size);
+                if ($orientation == 'w')
+                    $thumb->scale(width: $size);
+                else
+                    $thumb->scale(height: $size);
 
-            if (!Storage::exists($dirname))
-                Storage::makeDirectory($dirname);
+                if (!Storage::exists($dirname))
+                    Storage::makeDirectory($dirname);
 
-            $thumb->toWebp(90)->save(Storage::path($thumbPath));
-            unset($thumb);
+                $thumb->toWebp(90)->save(Storage::path($thumbPath));
+                unset($thumb);
+            }
+            else {
+                throw new ApiException(500, "Image type \"$image->type\" not supported");
+            }
         }
         return response()->file(Storage::path($thumbPath), ['Cache-Control' => ['max-age=86400', 'private']]);
     }

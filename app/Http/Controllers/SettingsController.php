@@ -15,7 +15,9 @@ class SettingsController extends Controller
     public function public()
     {
         $settings = Cache::remember('public_settings', (7 * 24 * 60 * 60), fn () => [
-            'allowed_upload_mimes'  => config('setups.allowed_upload_mimes'),
+            'allowed_image_extensions'  => config('setups.allowed_image_extensions'),
+            'allowed_video_extensions'  => config('setups.allowed_video_extensions'),
+            'allowed_audio_extensions'  => config('setups.allowed_audio_extensions'),
             'allowed_preview_sizes' => config('setups.allowed_preview_sizes'),
             'reactions'   => Reaction ::all(),
             'age_ratings' => AgeRating::all(),

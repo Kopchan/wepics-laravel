@@ -2,8 +2,6 @@
 
 namespace App\Console\Commands;
 
-use App\Enums\ImageExtension;
-use App\Exceptions\ApiDebugException;
 use App\Models\Album;
 use App\Models\Image;
 use App\Models\ImageDuplica;
@@ -14,6 +12,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\Console\Formatter\OutputFormatterStyle;
 use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
 class StoreIndex extends Command
 {
@@ -50,9 +49,14 @@ class StoreIndex extends Command
             ->orderBy('path')                                          // Сортировка по алфавиту
             ->get();
         $this::newLine();
-        $allowedExtensions = ImageExtension::values();
+        $allowedImageExtensions = config('setups.allowed_image_extensions');
+        $allowedVideoExtensions = config('setups.allowed_video_extensions');
+        $allowedAudioExtensions = config('setups.allowed_audio_extensions');
+        $allowedStreamExtensions = $allowedVideoExtensions + $allowedAudioExtensions;
 
         //if (!$this->confirm('Do you wish index albums? ['. $albums->count() .' in DB already]', true)) return;
+
+        $probe = FFProbe::create();
 
         $startFrom = $this->option('start-from');
         if (!$startFrom)
@@ -237,10 +241,32 @@ class StoreIndex extends Command
 
                     // Отсекание не-картинок по расширению файла
                     $extension = pathinfo($file, PATHINFO_EXTENSION);
-                    if (!in_array($extension, $allowedExtensions)) {
+                    $extension = strtolower($extension);
+                    if (in_array($extension, $allowedImageExtensions))
+                        $type = 'image';
+                    else
+                    if (in_array($extension, $allowedVideoExtensions))
+                        $type = 'video';
+                    else
+                    if (in_array($extension, $allowedAudioExtensions))
+                        $type = 'audio';
+                    else {
                         $this->line("<fg=blue>\r× "
                             . $counter
                             ." <fg=blue;href=file:///$file>$name</>"
+                            ." \".$extension\" not support/allowed"
+                            .'</>'
+                        );
+                        continue;
+                    }
+
+                    // Отсекаем не совпадающие c определителем MIME по заголовкам файла
+                    $guessExtension = File::guessExtension($file);
+                    if ($extension !== $guessExtension) {
+                        $this->line("<fg=red>\r× "
+                            . $counter
+                            ." <fg=blue;href=file:///$file>$name</>"
+                            ." \".$guessExtension\" is actual format"
                             .'</>'
                         );
                         continue;
@@ -300,18 +326,79 @@ class StoreIndex extends Command
                     }
 
                     // Получение размеров картинки, если нет размеров (не получили) — пропуск
-                    $sizes = getimagesize($file);
-                    if (!$sizes) continue;
+                    if ($type === 'image') {
+                        $sizes = getimagesize($file); // TODO: на перевёрнутых JPG даёт те же размеры
+                        if (!$sizes) {
+                            $this->line("<fg=red>\r× "
+                                . $counter
+                                ." <fg=blue;href=file:///$file>$name</>"
+                                ." cannot get image sizes"
+                                .'</>'
+                            );
+                            continue;
+                        }
+                    }
+
+                    if ($type !== 'audio')
+                        $probeInfo = $probe->streams($file)->videos()->first();
+
+                    else
+                        $probeInfo = $probe->streams($file)->audios()->first();
+
+                    $steamContentFields = [];
+
+                    if ($type === 'image' && $probeInfo->get('duration_ts') > 1)
+                        $type = 'imageAnimated';
+
+                    if ($type !== 'image') {
+                        if (!($probeInfo->get('duration_ts'))) {
+                            $this->line("<fg=red>\r× "
+                                . $counter
+                                ." <fg=blue;href=file:///$file>$name</>"
+                                ." cannot get duration_ts from $type"
+                                .'</>'
+                            );
+                            continue;
+                        }
+                        $steamContentFields['codec_name'] = $probeInfo->get('codec_name');
+
+                        $number = $probeInfo->get('duration');
+                        if (!str_contains($number, '.')) $number .= '.000';
+                        [$intPart, $decimalPart] = explode('.', $number, 2);
+                        $decimalPart = substr($decimalPart . '000', 0, 3);
+                        $steamContentFields['duration_ms'] = (int)($intPart . $decimalPart);
+
+                        if ($type !== 'audio') {
+                            $sizes = [
+                                $probeInfo->get('width'),
+                                $probeInfo->get('height')
+                            ];
+
+                            $framerate = array_map('intval',
+                                explode('/', $probeInfo->get('avg_frame_rate'))
+                            );
+                            $steamContentFields['avg_frame_rate_num'] = $framerate[0];
+                            $steamContentFields['avg_frame_rate_den'] = $framerate[1];
+                            $steamContentFields['frame_count'] = (int)$probeInfo->get('nb_frames');
+                        }
+                        else {
+                            $sizes = [500, 500]; // TODO: Читать из обложки аудио
+                        }
+                    }
+
+                    //dd($extension, $type, $steamContentFields);
 
                     // Создание в БД записи
                     $imageModel = Image::create([
+                        'album_id' => $currentAlbum->id,
                         'name' => $name,
+                        'type' => $type,
                         'hash' => $hash,
                         'date' => Carbon::createFromTimestamp(File::lastModified($file)),
                         'size' => File::size($file),
                         'width'  => $sizes[0],
                         'height' => $sizes[1],
-                        'album_id' => $currentAlbum->id,
+                        ...$steamContentFields,
                     ]);
                     $this->line("<fg=green>\r+ "
                         . $counter

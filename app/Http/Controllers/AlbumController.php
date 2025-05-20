@@ -215,10 +215,14 @@ class AlbumController extends Controller
         // Сортировка контента
         $contentSortType = $request->sort ?? SortType::values()[0];
         $contentSortTypeRaw = match ($contentSortType) {
-            'reacts' => "reactions_count",
-            'ratio'  =>     "width / height",
-            'square' => "ABS(GREATEST(width, height) / LEAST(width, height) - 1)",
-            default  => $contentSortType,
+            'reacts'     => "reactions_count",
+            'ratio'      => "width / height",
+            'square'     => "ABS(GREATEST(width, height) / LEAST(width, height) - 1)",
+            'frames'     => "frames_count IS NULL, frames_count",
+            'duration'   => "duration_ms IS NULL, duration_ms",
+            'framerate'  => "avg_frame_rate_den IS NULL, avg_frame_rate_num / avg_frame_rate_den",
+            'bitrate'    => "duration_ms IS NULL, size * 8 / duration_ms * 1000",
+            default      => $contentSortType,
         };
         $contentSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
         $contentNaturalSort   = "natural_sort_key $contentSortDirection";
@@ -236,7 +240,10 @@ class AlbumController extends Controller
             'name'    =>                                           $albumNaturalSort,
             'content' => "content_sort_field $albumsSortDirection, $albumNaturalSort",
             'created' =>         "created_at $albumsSortDirection, $albumNaturalSort",
+            'medias'  =>       "medias_count $albumsSortDirection, $albumNaturalSort",
             'images'  =>       "images_count $albumsSortDirection, $albumNaturalSort",
+            'videos'  =>       "videos_count $albumsSortDirection, $albumNaturalSort",
+            'audios'  =>       "audios_count $albumsSortDirection, $albumNaturalSort",
             'albums'  =>       "albums_count $albumsSortDirection, $albumNaturalSort",
             'indexed' =>    "last_indexation $albumsSortDirection, $albumNaturalSort",
             default   =>    "$albumsSortType $albumsSortDirection, $albumNaturalSort",
@@ -265,16 +272,22 @@ class AlbumController extends Controller
                 .  'where `images`.`id` = `reaction_images`.`image_id`'
                 .') as `content_sort_field`'));
         }
-        else
+        else {
+            $columns = explode(',', $contentSortTypeRaw);
+            $selectColumn = $columns[count($columns) - 1];
             $contentSortFieldSubquery
-                ->selectRaw("$contentSortTypeRaw as content_sort_field");
+                ->selectRaw("$selectColumn as content_sort_field");
+        }
 
         // Нужно ли подгружать дочерние альбомы?
         $childrenIsRequired = !$request->has('simple');
 
         // Вычисление того что подгрузить к альбому
         $withCount = [
-            'images',
+            'images as medias_count',
+            'images as images_count' => fn($q) => $q->where  ('type',  'image'),
+            'images as videos_count' => fn($q) => $q->whereIn('type', ['video', 'imageAnimated']),
+            'images as audios_count' => fn($q) => $q->where  ('type',  'audio'),
             'childAlbums as albums_count',
         ];
         $withLoad = [
@@ -316,7 +329,7 @@ class AlbumController extends Controller
         // Проход по дочерним альбомам и запись сигнатур-токенов для получения картинок
         foreach ($targetAlbum->childAlbums as $index => $child) {
             $level = $child->getAccessLevelCached($user);
-            $hasImages = $child->images_count > 0;
+            $hasImages = $child->medias_count > 0;
             switch ($level) {
                 case AccessLevel::None:
                     $targetAlbum->childAlbums->forget($index);

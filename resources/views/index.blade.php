@@ -49,12 +49,13 @@
     <meta name="apple-mobile-web-app-capable"          content="yes">
     <meta name="apple-mobile-web-app-title"            content="Wepics">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="darkreader-lock">
 
     <link rel="icon"             type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="apple-touch-icon" type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="icon"             type="image/svg+xml"             href="/favicon/icon.svg">
-    <script type="module" crossorigin src="/assets/index-WOZRU7no.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DuhjQV0E.css">
+    <script type="module" crossorigin src="/assets/index-3qha96_q.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B_Re1so3.css">
   </head>
   <body>
     <div id="app"></div>

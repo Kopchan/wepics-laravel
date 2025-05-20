@@ -15,6 +15,7 @@ class Image extends Model
     // Заполняемые поля
     protected $fillable = [
         'name',
+        'type',
         'hash',
         'date',
         'size',
@@ -22,6 +23,11 @@ class Image extends Model
         'height',
         'album_id',
         'age_rating_id',
+        'codec_name',
+        'frame_count',
+        'duration_ms',
+        'avg_frame_rate_num',
+        'avg_frame_rate_den',
     ];
 
     // Получение картинки по хешу

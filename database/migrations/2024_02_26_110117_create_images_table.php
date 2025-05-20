@@ -13,7 +13,7 @@ return new class extends Migration
             $table->string   ('name', 255);
             $table->string   ('hash', 32);
             $table->dateTime ('date');
-            $table->integer  ('size');
+            $table->unsignedBigInteger('size');
             $table->integer  ('width');
             $table->integer  ('height');
             $table->foreignId('album_id')

@@ -15,11 +15,16 @@ class ImageResource extends JsonResource
         return [
 //          'id'        => $this->id,
             'name'      => $this->name,
+            'type'      => $this->type,
             'hash'      => $this->hash,
             'date'      => $this->date,
             'size'      => $this->size,
             'width'     => $this->width,
             'height'    => $this->height,
+            'frames'    => $this->when($this->frames,             fn() => $this->frames),
+            'duration'  => $this->when($this->duration_ms,        fn() => $this->duration_ms / 1000),
+            'bitrate'   => $this->when($this->duration_ms,        fn() => round($this->size * 8 / $this->duration_ms * 1000)),
+            'framerate' => $this->when($this->avg_frame_rate_den, fn() => round($this->avg_frame_rate_num / $this->avg_frame_rate_den, 2)),
             'ratingId'  => $this->when($this->age_rating_id, $this->age_rating_id),
             'tags'      => $this->whenLoaded('tags', fn() =>
                 $this->when($this->tags->isNotEmpty(), fn () => TagResource::collection($this->tags))

@@ -8,11 +8,14 @@ enum SortAlbumType: string
 {
     use EnumValues;
 
-    case NAME    = 'name';
-    case CONTENT = 'content'; // Присоединяет картинку и ищет по обычной сортировке картинок
-    case CREATED = 'created';
-    case INDEXED = 'indexed';
-    case IMAGES = 'images';
-    case ALBUMS = 'albums';
-    case SIZE    = 'size';
+    case Name        = 'name';
+    case Content     = 'content'; // Присоединяет картинку и ищет по обычной сортировке картинок
+    case CreatedAt   = 'created';
+    case IndexedAt   = 'indexed';
+    case Size        = 'size';
+    case AlbumsCount = 'albums';
+    case MediasCount = 'medias';
+    case ImagesCount = 'images';
+    case VideosCount = 'videos';
+    case AudiosCount = 'audios';
 }

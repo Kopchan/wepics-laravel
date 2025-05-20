@@ -8,7 +8,7 @@ use App\Http\Controllers\ImageController;
 use App\Http\Controllers\AccessController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\ReactionController;
-use Spatie\Browsershot\Browsershot;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
 /*
 |--------------------------------------------------------------------------
