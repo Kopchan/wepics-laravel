@@ -40,6 +40,9 @@ class Image extends Model
             ->first();
         if(!$image)
             throw new ApiException(404, "Image not found");
+
+        $image->album = $album;
+
         return $image;
     }
     // Получение картинки по хешу или алиасу

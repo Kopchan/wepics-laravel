@@ -89,11 +89,12 @@ Route
             $image->middleware('token.auth:admin')->delete('', 'delete');
             $image->middleware('token.auth:admin')->patch ('', 'rename');
             $image->get('',         'info');
-            $image->get('orig',     'orig');
+            $image->get('orig',     'orig')->name('get.image.orig');
             $image->any('download', 'download');
-            $image->get('thumb/{orient}{px}', 'thumb')
+            $image->get('thumb/{orient}{px}{ani?}', 'thumb')
                 ->where('orient', '[whWH]')
                 ->where('px'    , '[0-9]+')
+                ->where('ani'   , '[a]')
                 ->withoutMiddleware("throttle:api")
                 ->name('get.image.thumb');
             $image

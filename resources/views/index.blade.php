@@ -6,26 +6,45 @@
     <meta property="og:site_name" content="{{ config('app.name') }}" />
     @if(isset($album))
       @if(!isset($image))
-        <meta property="og:title"         content="{{ $album->name }}" />
-        <meta property="og:image:type"    content="image/png" />
-        <meta property="og:image:width"   content="1200" />
-        <meta property="og:image:height"  content="1200" />
-        <meta property="og:image"         content="{{ route('get.album.og', $album->hash) }}" />
-        <meta name="twitter:card"         content="summary_large_image">
-        <meta name="twitter:image:type"   content="image/png" />
-        <meta name="twitter:image:width"  content="1200" />
-        <meta name="twitter:image:height" content="1200" />
-        <meta name="twitter:image"        content="{{ route('get.album.og', $album->hash) }}" />
+        <meta property="og:title"          content="{{ $album->name }}" />
+        <meta property="og:image:type"     content="image/png" />
+        <meta property="og:image:width"    content="1200" />
+        <meta property="og:image:height"   content="1200" />
+        <meta property="og:image"          content="{{ route('get.album.og', $album->hash) }}" />
+        <meta name="twitter:card"          content="summary_large_image">
+        <meta name="twitter:image:type"    content="image/png" />
+        <meta name="twitter:image:width"   content="1200" />
+        <meta name="twitter:image:height"  content="1200" />
+        <meta name="twitter:image"         content="{{ route('get.album.og', $album->hash) }}" />
+        <meta name="twitter:image"         content="{{ route('get.album.og', $album->hash) }}" />
+      @elseif($image->type === 'video' || $image->type === 'imageAnimated')
+        <meta property="og:type"           content="video.other" />
+        <meta property="og:title"          content="{{ $image->name }}" />
+        <meta property="og:description"    content="Explore more videos in {{ $album->name }}" />
+        <meta property="og:image:width"    content="{{ $image->widthThumb }}" />
+        <meta property="og:image:height"   content="{{ $image->heightThumb }}" />
+        <meta property="og:image"          content="{{ $image->urlThumbRoute }}" />
+        <meta property="og:video:width"    content="{{ $image->width }}">
+        <meta property="og:video:height"   content="{{ $image->height }}">
+        <meta property="og:video:duration" content="{{ (int)($image->duration_ms / 1000) }}">
+        <meta property="og:video"          content="{{ $image->urlOrigRoute }}" />
+        <meta name="twitter:card"          content="player">
+        <meta name="twitter:image:width"   content="{{ $image->widthThumb }}" />
+        <meta name="twitter:image:height"  content="{{ $image->heightThumb }}" />
+        <meta name="twitter:image"         content="{{ $image->urlThumbRoute }}" />
+        <meta name="twitter:player:width"  content="{{ $image->width }}" />
+        <meta name="twitter:player:height" content="{{ $image->height }}" />
+        <meta name="twitter:player"        content="{{ $image->urlOrigRoute }}" />
       @else
-        <meta property="og:title"         content="{{ $image->name }}" />
-        <meta property="og:description"   content="Explore more images in {{ $album->name }}" />
-        <meta property="og:image:width"   content="{{ $image->widthThumb }}" />
-        <meta property="og:image:height"  content="{{ $image->heightThumb }}" />
-        <meta property="og:image"         content="{{ $image->urlRoute }}" />
-        <meta name="twitter:card"         content="summary_large_image">
-        <meta name="twitter:image:width"  content="{{ $image->widthThumb }}" />
-        <meta name="twitter:image:height" content="{{ $image->heightThumb }}" />
-        <meta name="twitter:image"        content="{{ route('get.image.thumb', [$album->hash, $image->hash, $image->orient, 1080]) }}" />
+        <meta property="og:title"          content="{{ $image->name }}" />
+        <meta property="og:description"    content="Explore more images in {{ $album->name }}" />
+        <meta property="og:image:width"    content="{{ $image->widthThumb }}" />
+        <meta property="og:image:height"   content="{{ $image->heightThumb }}" />
+        <meta property="og:image"          content="{{ $image->urlThumbRoute }}" />
+        <meta name="twitter:card"          content="summary_large_image">
+        <meta name="twitter:image:width"   content="{{ $image->widthThumb }}" />
+        <meta name="twitter:image:height"  content="{{ $image->heightThumb }}" />
+        <meta name="twitter:image"         content="{{ $image->urlThumbRoute }}" />
       @endif
     @else
       @if(Request::is('/'))
@@ -35,7 +54,6 @@
       @endif
       <meta property="og:image" content="/favicon/maskable_icon_x512.png">
     @endif
-    <meta property="og:type" content="website" />
 
     <link rel="manifest" href="/manifest.json">
 
@@ -54,8 +72,8 @@
     <link rel="icon"             type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="apple-touch-icon" type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="icon"             type="image/svg+xml"             href="/favicon/icon.svg">
-    <script type="module" crossorigin src="/assets/index-3qha96_q.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B_Re1so3.css">
+    <script type="module" crossorigin src="/assets/index-Blwjpsz_.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CtKEc9Jf.css">
   </head>
   <body>
     <div id="app"></div>

@@ -7,19 +7,23 @@ use App\Enums\ImageExtension;
 use App\Enums\SortType;
 use App\Exceptions\ApiDebugException;
 use App\Exceptions\ApiException;
+use App\Helpers\StreamHelper;
 use App\Http\Requests\AlbumImagesRequest;
 use App\Http\Requests\AlbumCreateRequest;
 use App\Http\Requests\UploadRequest;
 use App\Http\Resources\ImageLinkResource;
 use App\Http\Resources\ImageResource;
+use App\Jobs\GeneratePreviewVideo;
 use App\Models\Album;
 use App\Models\Image;
 use App\Models\ImageDuplica;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Validator;
 use Intervention\Image\Laravel\Facades\Image as Intervention;
 use Illuminate\Support\Facades\Storage;
@@ -378,7 +382,7 @@ class ImageController extends Controller
         return response($response);
     }
 
-    public function thumb($albumHash, $imageHash, $orientation, $size)
+    public function thumb($albumHash, $imageHash, $orientation = null, $size = null, $animated = null)
     {
         // TODO: обрабатывать запрос на превью бОльшего размера, чем оригинала
         // Проверка доступа по токену в ссылке
@@ -387,19 +391,15 @@ class ImageController extends Controller
             (Album::getAccessLevelCachedByHash($albumHash, null) === AccessLevel::None) &&
             !($sign && Album::checkSignStatic($albumHash, $sign))
         ) {
-            //[
-            //    'album' => $album,
-            //    'image' => $image,
-            //] = Image::getByHashOrAlias($albumHash, $imageHash);
             // Проверка доступа по токену в заголовках
-            $image = Image::getByHash($albumHash, $imageHash);
+            $image = Image::getByHashOrAlias($albumHash, $imageHash);
             if (Album::getAccessLevelCachedByHash($albumHash, request()->user()) === AccessLevel::None)
                 throw new ApiException(403, 'Forbidden for you');
         }
 
         // Проверка наличия превью в файлах
-        $dirname = "thumbs/$orientation$size";
-        $thumbPath = "$dirname/$imageHash.webp";
+        $dirname = "thumbs/{$orientation}{$size}{$animated}";
+        $thumbPath = "$dirname/$imageHash" . (!$animated ? '.webp' : '.mp4');
         if (!Storage::exists($thumbPath)) {
             // Проверка запрашиваемого размера и редирект, если не прошло
             $askedSize = $size;
@@ -415,21 +415,75 @@ class ImageController extends Controller
             if (!$allowSize) $size = $allowedSizes[count($allowedSizes)-1];
             if ($askedSize != $size)
                 return redirect()->route('get.image.thumb', [
-                    $albumHash, $imageHash, $orientation, $size
-                ])->header('Cache-Control', ['max-age=86400', 'private']);;
-
-            // Проверка наличия превью в файлах x2
-            //$dirname = "thumbs/$orientation$size";
-            //$thumbPath = "$dirname/$imageHash.webp";
-            //if (!Storage::exists($thumbPath)) {
-            //}
+                    $albumHash, $imageHash, $orientation, $size, $animated
+                ])->header('Cache-Control', ['max-age=86400', 'private']);
 
             // Создание превью
-            $image = $image ?? Image::getByHash($albumHash, $imageHash);
+            $image = $image ?? Image::getByHashOrAlias($albumHash, $imageHash);
+            $type = $image->type;
 
-            $imagePath = Storage::path('images'. $image->album->path . $image->name);
+            if ($animated && ($type !== 'imageAnimated' && $type !== 'video'))
+                return redirect()->route('get.image.thumb', [
+                    $albumHash, $imageHash, $orientation, $size
+                ])->header('Cache-Control', ['max-age=86400', 'private']);
 
-            if ($image->type === 'image' || $image->type === 'imageAnimated') {
+            $mediaPath = Storage::path('images'. $image->album->path . $image->name);
+
+            if ($type === 'image')
+                $imagePath = $mediaPath;
+            else if ($type === 'video' || $type === 'imageAnimated') {
+                if (!$animated) {
+                    $framePath = Storage::path("thumbs/frames/$image->hash.png");
+
+                    // Использование оригинального превью/кадра видео
+                    if (file_exists($framePath))
+                        $imagePath = $framePath;
+                    else
+                        $imagePath = StreamHelper::extractPreview($mediaPath, $image);
+                }
+            }
+            else
+                throw new ApiException(500, "Media type \"$type\" not supported");
+
+            if ($animated) {
+                // Создание превью как mp4 видео
+                //StreamHelper::genPreviewVideo($mediaPath, $thumbPath, $orientation, $size);
+                //return response([
+                //    'message' => 'Started create video preview'
+                //], 202);
+
+
+                Cache::put('test', 'test');
+
+                GeneratePreviewVideo::dispatchSync($image, $mediaPath, $thumbPath, $orientation, $size);
+
+                //$job = GeneratePreviewVideo::dispatch($image, $mediaPath, $thumbPath, $orientation, $size);
+                //
+                //$result = null;
+                //$timeout = 60; // 60 секунд
+                //$startTime = time();
+                //
+                ////Cache::put('test', 'test');
+                //// Подписываемся на канал Redis и ждем
+                //$redis = Redis::connection()->client();
+                //dd($redis, Redis::connection(), $job);
+                //$redis->subscribe(["job.GeneratePreviewVideo.{$image->hash}{$orientation}{$size}"], function ($message) use (&$result) {
+                //    $data = json_decode($message, true);
+                //    $result = $data['result'];
+                //});
+
+                // Ожидание (неблокирующее)
+                //while (is_null($result) && (time() - $startTime) < $timeout) {
+                //    usleep(100_000); // 100ms задержка
+                //}
+                //
+                //if (is_null($result)) {
+                //    return response(['message' => 'Timeout after 60 seconds'], 504);
+                //}
+
+            }
+            else {
+                // Создание превью как webp картинку
                 $thumb = Intervention::read($imagePath);
 
                 if ($orientation == 'w')
@@ -443,10 +497,14 @@ class ImageController extends Controller
                 $thumb->toWebp(90)->save(Storage::path($thumbPath));
                 unset($thumb);
             }
-            else {
-                throw new ApiException(500, "Image type \"$image->type\" not supported");
-            }
         }
+        else
+        if ($animated && Storage::fileSize($thumbPath) < 1) {
+            return response([
+                'message' => 'Pending create video preview'
+            ], 202);
+        }
+
         return response()->file(Storage::path($thumbPath), ['Cache-Control' => ['max-age=86400', 'private']]);
     }
 

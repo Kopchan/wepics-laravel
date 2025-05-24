@@ -232,22 +232,25 @@ class AlbumController extends Controller
         };
 
         // Сортировка дочерних альбомов
-        $albumsSortType      = $request->sortAlbums ?? SortAlbumType::values()[0];
+        $albumsSortType = $request->sortAlbums ?? SortAlbumType::values()[0];
+        $albumsSortTypeRaw = match ($albumsSortType) {
+            'content'  => "content_sort_field",
+            'medias'   => "medias_count",
+            'images'   => "images_count",
+            'videos'   => "videos_count",
+            'audios'   => "audios_count",
+            'albums'   => "albums_count",
+            'indexed'  => "last_indexation",
+            'created'  => "created_at",
+            default    => $albumsSortType,
+        };
         $albumsSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
-        $albumOrderLevel     = $request->has('disrespect') ? '' : 'order_level DESC, ';
         $albumNaturalSort    = "natural_sort_key $albumsSortDirection";
         $albumSort = match ($albumsSortType) {
-            'name'    =>                                           $albumNaturalSort,
-            'content' => "content_sort_field $albumsSortDirection, $albumNaturalSort",
-            'created' =>         "created_at $albumsSortDirection, $albumNaturalSort",
-            'medias'  =>       "medias_count $albumsSortDirection, $albumNaturalSort",
-            'images'  =>       "images_count $albumsSortDirection, $albumNaturalSort",
-            'videos'  =>       "videos_count $albumsSortDirection, $albumNaturalSort",
-            'audios'  =>       "audios_count $albumsSortDirection, $albumNaturalSort",
-            'albums'  =>       "albums_count $albumsSortDirection, $albumNaturalSort",
-            'indexed' =>    "last_indexation $albumsSortDirection, $albumNaturalSort",
-            default   =>    "$albumsSortType $albumsSortDirection, $albumNaturalSort",
+            'name'  =>                                           $albumNaturalSort,
+            default => "$albumsSortTypeRaw $albumsSortDirection, $albumNaturalSort",
         };
+        $albumOrderLevel = $request->has('disrespect') ? '' : 'order_level DESC, ';
         $albumSort = $albumOrderLevel.$albumSort;
 
         // Кол-во загружаемых картинок ко всем альбомам
@@ -296,7 +299,8 @@ class AlbumController extends Controller
         if ($childrenIsRequired)
             $withLoad['childAlbums'] = fn($q) => $q
                 ->withCount($withCount)
-                ->withSum('images as size', 'size')
+                ->withSum('images as size'    , 'size')
+                ->withSum('images as duration', 'duration_ms')
                 ->addSelect($albumsSortType === 'content' ? [
                     'content_sort_field' => $contentSortFieldSubquery
                 ] : [])
@@ -314,7 +318,8 @@ class AlbumController extends Controller
         // Получение альбома из БД и проверка доступа пользователю
         $targetAlbum = Album::getByHashOrAlias($hash, fn ($q) => $q
             ->withCount($withCount)
-            ->withSum('images as size', 'size')
+            ->withSum('images as size'    , 'size')
+            ->withSum('images as duration', 'duration_ms')
             ->with($withLoad)
         );
 
@@ -412,7 +417,7 @@ class AlbumController extends Controller
             $newPath = dirname($album->path) .'/'. $newFolderName .'/';
             $newLocalPath = "images$newPath";
             if (Storage::exists($newPath))
-                throw new ApiException(409, 'Album with this name already exist');
+                throw new ApiException(409, 'Album with this internal name already exist');
 
             Storage::move($oldLocalPath, $newLocalPath);
             $album->path = $newPath;
@@ -428,7 +433,7 @@ class AlbumController extends Controller
         // Имя в ссылке (алиас)
         $oldAlias = $album->alias;
         $newAlias = $request->urlName;
-        if ($request->has('urlName')) {
+        if ($request->has('urlName') && $newAlias != $oldAlias) {
             $album->alias = $newAlias;
 
             if ($oldAlias) AlbumAlias::updateOrCreate(
@@ -436,6 +441,7 @@ class AlbumController extends Controller
                 ['album_id' => $album->id],
             );
         }
+        $guestAllowBefore = $album->guest_allow;
 
         if ($request->has('ageRatingId' )) $album->age_rating_id = $request->ageRatingId;
         if ($request->has('orderLevel'  )) $album->order_level   = $request->orderLevel ?? 0;
@@ -443,6 +449,10 @@ class AlbumController extends Controller
         if ($request->has('guestAllow'  )) $album->guest_allow   = $request->guestAllow;
 
         $album->save();
+
+        if ($guestAllowBefore !== $album->guest_allow)
+            Album::getAccessLevelBatchById($album->id);
+
         return response(AlbumResource::make($album), 200);
     }
 
@@ -458,11 +468,6 @@ class AlbumController extends Controller
 
         $album->delete();
         return response(null, 204);
-    }
-
-    public function og()
-    {
-        return 'nothing';
     }
 
     public function ogView($hashOrAlias)

@@ -18,7 +18,7 @@ class SettingsController extends Controller
             'allowed_image_extensions'  => config('setups.allowed_image_extensions'),
             'allowed_video_extensions'  => config('setups.allowed_video_extensions'),
             'allowed_audio_extensions'  => config('setups.allowed_audio_extensions'),
-            'allowed_preview_sizes' => config('setups.allowed_preview_sizes'),
+            'allowed_preview_sizes'     => config('setups.allowed_preview_sizes'),
             'reactions'   => Reaction ::all(),
             'age_ratings' => AgeRating::all(),
         ]);

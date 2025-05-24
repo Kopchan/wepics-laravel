@@ -29,6 +29,7 @@ class AlbumResource extends JsonResource
             'audiosCount' => $this->when($this->audios_count,           fn() => $this->audios_count),
             'albumsCount' => $this->when($this->albums_count,           fn() => $this->albums_count),
             'size'        => $this->when($this->size,                   fn() => $this->size),
+            'duration'    => $this->when($this->duration,               fn() => (int)$this->duration / 1000),
             'contentSort' => $this->when($this->content_sort_field,     fn() => $this->content_sort_field),
             'sign'        => $this->when($this->sign,                   fn() => $this->sign),
 //          'images'      => $this->whenLoaded('images',                fn() => ImageResource::collection($this->images)),

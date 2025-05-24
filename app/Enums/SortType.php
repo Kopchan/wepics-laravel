@@ -8,16 +8,16 @@ enum SortType: string
 {
     use EnumValues;
 
-    case Name   = 'name';
-    case Date   = 'date';
-    case Size   = 'size';
-    case Width  = 'width';
-    case Height = 'height';
-    case Ratio  = 'ratio';
-    case Squareness = 'square';
+    case Name           = 'name';
+    case Date           = 'date';
+    case Size           = 'size';
+    case Width          = 'width';
+    case Height         = 'height';
+    case Ratio          = 'ratio';
+    case Squareness     = 'square';
     case ReactionsCount = 'reacts';
-    case Duration    = 'duration';
-    case FramesCount = 'frames';
-    case BitRate     = 'bitrate';
-    case FrameRate   = 'framerate';
+    case Duration       = 'duration';
+    case FramesCount    = 'frames';
+    case BitRate        = 'bitrate';
+    case FrameRate      = 'framerate';
 }

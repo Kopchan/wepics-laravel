@@ -27,7 +27,7 @@ class ViewController extends Controller
         return view('index', compact('album'));
     }
 
-    public function image($albumHashOrAlias, $imageHash)
+    public function image($albumHashOrAlias, $type, $imageHash)
     {
         $album = Album
             ::where ('alias', $albumHashOrAlias)
@@ -44,14 +44,24 @@ class ViewController extends Controller
             return view('index', compact('album'));
 
         $image->orient = $image->width > $image->height ? 'h' : 'w';
-        $scale = 1080 / min($image->width, $image->height);
-        $image->widthThumb  = (int) round($image->width  * $scale);
-        $image->heightThumb = (int) round($image->height * $scale);
+        $minDirection = min($image->width, $image->height);
+        if ($minDirection <= 1080) {
+            $image->widthThumb  = $image->width;
+            $image->heightThumb = $image->height;
+        }
+        else {
+            $scale = 1080 / $minDirection;
+            $image->widthThumb  = (int) round($image->width  * $scale);
+            $image->heightThumb = (int) round($image->height * $scale);
+        }
+
+        $image->urlOrigRoute  = route('get.image.orig' , [$album->hash, $image->hash]);
+        $image->urlThumbRoute = route('get.image.thumb', [$album->hash, $image->hash, $image->orient, 1080]);
 
         return view('index', compact('album', 'image'));
     }
 
-    public function imageNested($albumHashOrAlias, $trueAlbumHashOrAlias, $imageHash)
+    public function imageNested($albumHashOrAlias, $trueAlbumHashOrAlias, $type, $imageHash)
     {
         $album = Album
             ::where ('alias', $albumHashOrAlias)
@@ -75,18 +85,21 @@ class ViewController extends Controller
             return view('index', compact('album'));
 
         $image->album = $trueAlbum;
+
         $image->orient = $image->width > $image->height ? 'h' : 'w';
         $minDirection = min($image->width, $image->height);
         if ($minDirection <= 1080) {
             $image->widthThumb  = $image->width;
             $image->heightThumb = $image->height;
-            $image->urlPath = route('get.image.thumb', [$album->hash, $image->hash, $image->orient, 1080]);
         }
         else {
             $scale = 1080 / $minDirection;
             $image->widthThumb  = (int) round($image->width  * $scale);
             $image->heightThumb = (int) round($image->height * $scale);
         }
+
+        $image->urlOrigRoute  = route('get.image.orig' , [$trueAlbum->hash, $image->hash]);
+        $image->urlThumbRoute = route('get.image.thumb', [$trueAlbum->hash, $image->hash, $image->orient, 1080]);
 
         return view('index', compact('album', 'image'));
     }

@@ -52,7 +52,6 @@ class StoreIndex extends Command
         $allowedImageExtensions = config('setups.allowed_image_extensions');
         $allowedVideoExtensions = config('setups.allowed_video_extensions');
         $allowedAudioExtensions = config('setups.allowed_audio_extensions');
-        $allowedStreamExtensions = $allowedVideoExtensions + $allowedAudioExtensions;
 
         //if (!$this->confirm('Do you wish index albums? ['. $albums->count() .' in DB already]', true)) return;
 

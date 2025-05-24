@@ -15,10 +15,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::controller(ViewController::class)->group(function ($view) {
-    $view->view('',                              'index')->name('home');
-    $view->get ('{album}',                       'album')->name('album');
-    $view->get ('{album}/i/{image}',             'image');
-    $view->get ('{album}/{trueAlbum}/i/{image}', 'imageNested');
+    $view->view('',        'index')->name('home');
+    $view->get ('{album}', 'album')->name('album');
+    $view->get ('{album}/{type}/{image}',             'image')      ->where('type', 'i|a|v');
+    $view->get ('{album}/{trueAlbum}/{type}/{image}', 'imageNested')->where('type', 'i|a|v');
     $view->view('{any?}', 'index')->where('any', '.*')->name('any');
 });
 
