@@ -62,7 +62,8 @@ Route
 ->group(function ($album) {
     $album->get('', 'getLegacy');
     $album->get('info', 'get');
-    $album->get('og.png', 'ogImage')->name('get.album.og');
+    $album->get('og.png', 'ogImage')->name('get.album.ogLegacy');
+    $album->get('og', 'ogImage')->name('get.album.og');
     $album->get('ogView', 'ogView');
     $album->get('reindex', 'reindex');
     $album->middleware('token.auth:admin')->group(function ($albumManage) {

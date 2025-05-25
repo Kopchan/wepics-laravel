@@ -474,8 +474,12 @@ class AlbumController extends Controller
     {
         $album = Album::getByHashOrAlias($hashOrAlias, fn ($q) => $q
             ->withSum('images as size', 'size')
+            ->withSum('images as duration', 'duration_ms')
             ->withCount([
-                'images',
+                'images as medias_count',
+                'images as images_count' => fn($q) => $q->where  ('type',  'image'),
+                'images as videos_count' => fn($q) => $q->whereIn('type', ['video', 'imageAnimated']),
+                'images as audios_count' => fn($q) => $q->where  ('type',  'audio'),
                 'childAlbums as albums_count',
             ])
             ->with([

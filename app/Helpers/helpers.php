@@ -25,24 +25,68 @@ if (!function_exists('base64url_decode')) {
     }
 }
 
-
-
 if (!function_exists('bytesToHuman')) {
     function bytesToHuman(int $bytes): string
     {
-        //$units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
-        $units = ['B', 'K', 'M', 'G', 'T', 'P'];
+        $bytesUnits = [' B', ' KiB', ' MiB', ' GiB', ' TiB', ' PiB'];
+        $suffixIndex = 0;
+        $count = floatval($bytes);
 
-        $bytes = max($bytes, 0);
+        while ($count >= 1000 && $suffixIndex < count($bytesUnits) - 1) {
+            $count /= 1024;
+            $suffixIndex++;
+        }
 
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
+        if ($count >= 100 || $suffixIndex === 0) {
+            $formatted = number_format($count, 0, '.', '');
+        } elseif ($count >= 10) {
+            $formatted = number_format($count, 1, '.', '');
+        } else {
+            $formatted = number_format($count, 2, '.', '');
+        }
 
-        $bytes /= (1 << (10 * $pow));
+        return $formatted . $bytesUnits[$suffixIndex];
+    }
+}
 
-        $formatted = number_format($bytes, 3 - strlen(floor($bytes)), '.', '');
+if (!function_exists('durationToHuman')) {
+    function durationToHuman(float $seconds): string{
+        $totalSeconds = floatval($seconds);
+        $ms = round(fmod($totalSeconds, 1) * 1000);
+        $absSeconds = floor(abs($totalSeconds));
 
-        return $formatted . $units[$pow];
+        $days = floor($absSeconds / 86400);
+        $hours = floor(($absSeconds % 86400) / 3600);
+        $minutes = floor(($absSeconds % 3600) / 60);
+        $secs = $absSeconds % 60;
+
+        // Форматируем части с ведущими нулями (кроме дней)
+        $formatPart = function ($value, $suffix) {
+            if ($value <= 0 && $suffix !== 'ms') return '';
+            $paddedValue = $suffix === 'd' ? $value : str_pad($value, 2, '0', STR_PAD_LEFT);
+            return $paddedValue . $suffix;
+        };
+
+        // Собираем все значимые части (без нулевых)
+        $parts = array_filter([
+            $formatPart($days, 'd'),
+            $formatPart($hours, 'h'),
+            $formatPart($minutes, 'm'),
+            $formatPart($secs, 's'),
+        ]);
+
+        // Добавляем миллисекунды, если время < 1 минуты и они есть
+        if ($ms > 0 && $minutes < 1) {
+            $parts[] = str_pad($ms, 3, '0', STR_PAD_LEFT) . 'ms';
+        }
+
+        // Берём только две самые значимые части
+        $significantParts = array_slice($parts, 0, 2);
+
+        // Определяем разделитель
+        $separator = (isset($significantParts[1]) && str_ends_with($significantParts[1], 'ms')) ? '.' : ':';
+
+        return !empty($significantParts) ? implode($separator, $significantParts) : '0s';
     }
 }
 

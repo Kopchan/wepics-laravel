@@ -9,8 +9,8 @@
     @font-face {
       font-family: "Roboto Flex";
       font-weight: 100 1000;
-      src: url({{ asset('assets/font/RobotoFlex.woff2') }}) format("woff2"),
-           url({{ asset('assets/font/RobotoFlex.ttf') }})   format("truetype");
+      src: url({{ asset('assets/RobotoFlex-DLGGeIPC.woff2') }}) format("woff2"),
+           url({{ asset('assets/RobotoFlex-BM2Zixa-.ttf') }})   format("truetype");
     }
 
     html {
@@ -78,7 +78,7 @@
     .title .name {
       max-width: 100%;
       font-size: 76px;
-      font-weight: 500;
+      font-weight: 600;
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
@@ -86,12 +86,14 @@
     .title .params {
       font-size: 64px;
       color: #aaa;
-      display: flex;
+      display: inline-flex;
+      flex-wrap: wrap;
       justify-content: center;
       align-items: center;
-      gap: 48px;
+      gap: 12px 48px;
     }
     .title .params .item {
+      font-weight: 500;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -112,23 +114,41 @@
     <div class="title">
       <h1 class="name">{{ $album->name }}</h1>
       <div class="params">
-        @if ($album->images_count)
+        @if ($album->audios_count && $album->audios_count > ($album?->medias_count ?? 0) * 0.25)
           <div class="item">
-              <svg data-v-08208cfe="" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" size="96" class="lucide lucide-images-icon"><path d="M18 22H4a2 2 0 0 1-2-2V6"></path><path d="m22 13-1.296-1.296a2.41 2.41 0 0 0-3.408 0L11 18"></path><circle cx="12" cy="8" r="2"></circle><rect width="16" height="16" x="6" y="2" rx="2"></rect></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-music2-icon lucide-music-2"><circle cx="8" cy="18" r="4"/><path d="M12 18V2l7 4"/></svg>
+            <p>{{ countToHuman($album->audios_count) }}</p>
+          </div>
+        @endif
+        @if ($album->videos_count && $album->videos_count > ($album?->medias_count ?? 0) * 0.25)
+          <div class="item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video-icon lucide-video"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+            <p>{{ countToHuman($album->videos_count) }}</p>
+          </div>
+        @endif
+        @if ($album->images_count && $album->images_count > ($album?->medias_count ?? 0) * 0.25)
+          <div class="item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image-icon lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
               <p>{{ countToHuman($album->images_count) }}</p>
           </div>
         @endif
-        @if ($album->size)
-            <div class="item">
-                <svg data-v-08208cfe="" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" size="96" class="lucide lucide-save-icon"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                <p>{{ bytesToHuman($album->size) }}</p>
-            </div>
-        @endif
         @if ($album->albums_count)
-            <div class="item">
-                <svg data-v-08208cfe="" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" size="96" class="lucide lucide-folders-icon"><path d="M20 17a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.9a2 2 0 0 1-1.69-.9l-.81-1.2a2 2 0 0 0-1.67-.9H8a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2Z"></path><path d="M2 8v11a2 2 0 0 0 2 2h14"></path></svg>
-                <p>{{ countToHuman($album->albums_count) }}</p>
-            </div>
+          <div class="item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folders-icon"><path d="M20 17a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.9a2 2 0 0 1-1.69-.9l-.81-1.2a2 2 0 0 0-1.67-.9H8a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2Z"></path><path d="M2 8v11a2 2 0 0 0 2 2h14"></path></svg>
+            <p>{{ countToHuman($album->albums_count) }}</p>
+          </div>
+        @endif
+        @if ($album?->duration && $album->duration > 3_600_000)
+          <div class="item">
+              <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-hourglass-icon lucide-hourglass"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+              <p>{{ durationToHuman($album->duration / 1000) }}</p>
+          </div>
+        @endif
+        @if ($album->size)
+          <div class="item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-save-icon"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <p>{{ bytesToHuman($album->size) }}</p>
+          </div>
         @endif
       </div>
     </div>

@@ -72,8 +72,8 @@
     <link rel="icon"             type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="apple-touch-icon" type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="icon"             type="image/svg+xml"             href="/favicon/icon.svg">
-    <script type="module" crossorigin src="/assets/index-Blwjpsz_.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CtKEc9Jf.css">
+    <script type="module" crossorigin src="/assets/index-DOgXxsEI.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DpZc1sql.css">
   </head>
   <body>
     <div id="app"></div>

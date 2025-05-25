@@ -148,6 +148,9 @@ class StreamHelper
         if ($targetBitrate > $maxBitrate)
             $targetBitrate = $maxBitrate;
 
+        if ($media?->frame_count && $media->frame_count < 30)
+            $targetBitrate = $maxBitrate;
+
         //dd($targetBitrate, $minBitrate, $maxBitrate);
 
         // Полный быстрый NVIDIA кодировщик
