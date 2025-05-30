@@ -28,7 +28,7 @@ if (!function_exists('base64url_decode')) {
 if (!function_exists('bytesToHuman')) {
     function bytesToHuman(int $bytes): string
     {
-        $bytesUnits = [' B', ' KiB', ' MiB', ' GiB', ' TiB', ' PiB'];
+        $bytesUnits = [' B', ' KB', ' MB', ' GB', ' TB', ' PB'];
         $suffixIndex = 0;
         $count = floatval($bytes);
 

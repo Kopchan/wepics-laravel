@@ -20,6 +20,15 @@ class ViewController extends Controller
         $album = Album
             ::where ('alias', $albumHashOrAlias)
             ->orWhere('hash', $albumHashOrAlias)
+            ->withSum('images as size', 'size')
+            ->withSum('images as duration', 'duration_ms')
+            ->withCount([
+                'images as medias_count',
+                'images as images_count' => fn($q) => $q->where  ('type',  'image'),
+                'images as videos_count' => fn($q) => $q->whereIn('type', ['video', 'imageAnimated']),
+                'images as audios_count' => fn($q) => $q->where  ('type',  'audio'),
+                'childAlbums as albums_count',
+            ])
             ->first();
         if (!$album || $album->getAccessLevelCached() === AccessLevel::None)
             return view('index');
@@ -32,6 +41,10 @@ class ViewController extends Controller
         $album = Album
             ::where ('alias', $albumHashOrAlias)
             ->orWhere('hash', $albumHashOrAlias)
+            ->withCount([
+                'images as images_count' => fn($q) => $q->where  ('type',  'image'),
+                'images as videos_count' => fn($q) => $q->whereIn('type', ['video', 'imageAnimated']),
+            ])
             ->first();
         if (!$album || $album->getAccessLevelCached() === AccessLevel::None)
             return view('index');
@@ -66,6 +79,10 @@ class ViewController extends Controller
         $album = Album
             ::where ('alias', $albumHashOrAlias)
             ->orWhere('hash', $albumHashOrAlias)
+            ->withCount([
+                'images as images_count' => fn($q) => $q->where  ('type',  'image'),
+                'images as videos_count' => fn($q) => $q->whereIn('type', ['video', 'imageAnimated']),
+            ])
             ->first();
         if (!$album || $album->getAccessLevelCached() === AccessLevel::None)
             return view('index');

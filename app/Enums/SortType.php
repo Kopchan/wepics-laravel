@@ -10,6 +10,7 @@ enum SortType: string
 
     case Name           = 'name';
     case Date           = 'date';
+    case Random         = 'random';
     case Size           = 'size';
     case Width          = 'width';
     case Height         = 'height';

@@ -2,57 +2,92 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <title>Wepics</title>
-    <meta property="og:site_name" content="{{ config('app.name') }}" />
+    <title>{{ config('app.name') }}</title>
+    <meta property="og:site_name"            content="{{ config('app.name') }}" />
     @if(isset($album))
       @if(!isset($image))
-        <meta property="og:title"          content="{{ $album->name }}" />
-        <meta property="og:image:type"     content="image/png" />
-        <meta property="og:image:width"    content="1200" />
-        <meta property="og:image:height"   content="1200" />
-        <meta property="og:image"          content="{{ route('get.album.og', $album->hash) }}" />
-        <meta name="twitter:card"          content="summary_large_image">
-        <meta name="twitter:image:type"    content="image/png" />
-        <meta name="twitter:image:width"   content="1200" />
-        <meta name="twitter:image:height"  content="1200" />
-        <meta name="twitter:image"         content="{{ route('get.album.og', $album->hash) }}" />
-        <meta name="twitter:image"         content="{{ route('get.album.og', $album->hash) }}" />
-      @elseif($image->type === 'video' || $image->type === 'imageAnimated')
-        <meta property="og:type"           content="video.other" />
-        <meta property="og:title"          content="{{ $image->name }}" />
-        <meta property="og:description"    content="Explore more videos in {{ $album->name }}" />
-        <meta property="og:image:width"    content="{{ $image->widthThumb }}" />
-        <meta property="og:image:height"   content="{{ $image->heightThumb }}" />
-        <meta property="og:image"          content="{{ $image->urlThumbRoute }}" />
-        <meta property="og:video:width"    content="{{ $image->width }}">
-        <meta property="og:video:height"   content="{{ $image->height }}">
-        <meta property="og:video:duration" content="{{ (int)($image->duration_ms / 1000) }}">
-        <meta property="og:video"          content="{{ $image->urlOrigRoute }}" />
-        <meta name="twitter:card"          content="player">
-        <meta name="twitter:image:width"   content="{{ $image->widthThumb }}" />
-        <meta name="twitter:image:height"  content="{{ $image->heightThumb }}" />
-        <meta name="twitter:image"         content="{{ $image->urlThumbRoute }}" />
-        <meta name="twitter:player:width"  content="{{ $image->width }}" />
-        <meta name="twitter:player:height" content="{{ $image->height }}" />
-        <meta name="twitter:player"        content="{{ $image->urlOrigRoute }}" />
+        @php
+          $parts = [];
+          if ($album->albums_count) $parts[] = "{$album->albums_count} sub-album". ($album->albums_count > 1 ? 's' : '');
+          if ($album->audios_count) $parts[] = "{$album->audios_count} audio"    . ($album->audios_count > 1 ? 's' : '');
+          if ($album->videos_count) $parts[] = "{$album->videos_count} video"    . ($album->videos_count > 1 ? 's' : '');
+          if ($album->images_count) $parts[] = "{$album->images_count} image"    . ($album->images_count > 1 ? 's' : '');
+
+          $duration = $album->duration ? durationToHuman($album->duration / 1000).' in length' : null;
+          $size     = $album->size     ? bytesToHuman   ($album->size)           .' in size'   : null;
+
+          $hasCounters = !!count($parts);
+          $hasContent = $hasCounters || $duration || $size;
+
+          if (!$hasContent)
+            $description = 'Empty album';
+          else {
+            $description = 'Explore an album';
+
+            if (count($parts)) {
+              $last = array_pop($parts);
+              $description .= ' with '.(count($parts)
+                ? implode(', ', $parts) .' and '. $last
+                : $last
+              );
+            }
+
+            if ($duration || $size) {
+              $totaling = $duration ?: $size;
+              $tail = ($size)
+                ? $totaling .' and '. $size
+                : $totaling;
+
+              $description .= ($hasCounters ? ', totaling ' : ' with totaling '). $tail;
+            }
+          }
+        @endphp
+        <meta property="og:title"            content="{{ $album->name }}" />
+        <meta property="og:description"      content="{{ $description }}" />
+        <meta property="og:image:type"       content="image/png" />
+        <meta property="og:image:width"      content="1200" />
+        <meta property="og:image:height"     content="1200" />
+        <meta property="og:image"            content="{{ route('get.album.og', $album->hash) }}" />
+        <meta name="twitter:card"            content="summary_large_image">
+        <meta name="twitter:image:type"      content="image/png" />
+        <meta name="twitter:image:width"     content="1200" />
+        <meta name="twitter:image:height"    content="1200" />
+        <meta name="twitter:image"           content="{{ route('get.album.og', $album->hash) }}" />
       @else
-        <meta property="og:title"          content="{{ $image->name }}" />
-        <meta property="og:description"    content="Explore more images in {{ $album->name }}" />
-        <meta property="og:image:width"    content="{{ $image->widthThumb }}" />
-        <meta property="og:image:height"   content="{{ $image->heightThumb }}" />
-        <meta property="og:image"          content="{{ $image->urlThumbRoute }}" />
-        <meta name="twitter:card"          content="summary_large_image">
-        <meta name="twitter:image:width"   content="{{ $image->widthThumb }}" />
-        <meta name="twitter:image:height"  content="{{ $image->heightThumb }}" />
-        <meta name="twitter:image"         content="{{ $image->urlThumbRoute }}" />
+        <meta property="og:title"            content="{{ $image->name }}" />
+        <meta property="og:image:width"      content="{{ $image->widthThumb }}" />
+        <meta property="og:image:height"     content="{{ $image->heightThumb }}" />
+        <meta property="og:image"            content="{{ $image->urlThumbRoute }}" />
+        <meta name="twitter:image:width"     content="{{ $image->widthThumb }}" />
+        <meta name="twitter:image:height"    content="{{ $image->heightThumb }}" />
+        <meta name="twitter:image"           content="{{ $image->urlThumbRoute }}" />
+        @if($image->type === 'video' || $image->type === 'imageAnimated')
+          <meta property="og:description"    content="Explore {{
+            $album->videos_count > 1 ? ($album->videos_count - 1)." more videos in " : ''
+          }}{{ $album->name }}" />
+          <meta property="og:type"           content="video.other" />
+          <meta property="og:video:width"    content="{{ $image->width }}" />
+          <meta property="og:video:height"   content="{{ $image->height }}" />
+          <meta property="og:video:duration" content="{{ (int)($image->duration_ms / 1000) }}" />
+          <meta property="og:video"          content="{{ $image->urlOrigRoute }}" />
+          <meta name="twitter:card"          content="player" />
+          <meta name="twitter:player:width"  content="{{ $image->width }}" />
+          <meta name="twitter:player:height" content="{{ $image->height }}" />
+          <meta name="twitter:player"        content="{{ $image->urlOrigRoute }}" />
+        @else
+          <meta property="og:description"    content="Explore {{
+            $album->images_count > 1 ? ($album->images_count - 1)." more images in " : ''
+          }}{{ $album->name }}" />
+          <meta name="twitter:card"          content="summary_large_image">
+         @endif
       @endif
     @else
       @if(Request::is('/'))
-        <meta property="og:title" content="Homepage">
+        <meta property="og:title" content="Homepage" />
       @else
-        <meta property="og:title" content="Wepics">
+        <meta property="og:title" content="Wepics" />
       @endif
-      <meta property="og:image" content="/favicon/maskable_icon_x512.png">
+      <meta property="og:image" content="/favicon/maskable_icon_x512.png" />
     @endif
 
     <link rel="manifest" href="/manifest.json">
@@ -67,13 +102,14 @@
     <meta name="apple-mobile-web-app-capable"          content="yes">
     <meta name="apple-mobile-web-app-title"            content="Wepics">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <meta name="darkreader-lock">
 
     <link rel="icon"             type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="apple-touch-icon" type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="icon"             type="image/svg+xml"             href="/favicon/icon.svg">
-    <script type="module" crossorigin src="/assets/index-DOgXxsEI.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DpZc1sql.css">
+    <script type="module" crossorigin src="/assets/index-DjvJRFZP.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BCQJSBTa.css">
   </head>
   <body>
     <div id="app"></div>

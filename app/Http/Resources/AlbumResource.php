@@ -16,6 +16,7 @@ class AlbumResource extends JsonResource
 //          'id'          => $this->id,
             'name'        => $this->name,
             'hash'        => $this->hash,
+            'seed'        => $this->when($this?->seed,                   fn() => $this->seed),
             'path'        => $this->when($user?->is_admin,              fn() => $this->path),
             'alias'       => $this->when($this->alias,                  fn() => $this->alias),
             'orderLevel'  => $this->when($this->order_level,            fn() => $this->order_level),

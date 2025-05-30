@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AccessLevel;
+use App\Enums\MediaType;
 use App\Enums\SortAlbumType;
 use App\Enums\SortType;
 use App\Exceptions\ApiException;
@@ -214,7 +215,15 @@ class AlbumController extends Controller
 
         // Сортировка контента
         $contentSortType = $request->sort ?? SortType::values()[0];
+
+        $seed = $request->seed ?? (
+            $contentSortType === 'random'
+            ? mt_rand(100_000, 999_999)
+            : null
+        );
+
         $contentSortTypeRaw = match ($contentSortType) {
+            'random'     => 'RAND('.DB::getPdo()->quote($seed).')',
             'reacts'     => "reactions_count",
             'ratio'      => "width / height",
             'square'     => "ABS(GREATEST(width, height) / LEAST(width, height) - 1)",
@@ -224,16 +233,31 @@ class AlbumController extends Controller
             'bitrate'    => "duration_ms IS NULL, size * 8 / duration_ms * 1000",
             default      => $contentSortType,
         };
+        $contentSortTypeRawAdd = match ($contentSortType) {
+            'duration',
+            'bitrate'    => 'duration_ms'       ." IS NULL, $contentSortTypeRaw",
+            'frames'     => 'frames_count'      ." IS NULL, $contentSortTypeRaw",
+            'framerate'  => 'avg_frame_rate_den'." IS NULL, $contentSortTypeRaw",
+            default      =>                                 $contentSortTypeRaw,
+        };
         $contentSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
         $contentNaturalSort   = "natural_sort_key $contentSortDirection";
         $contentSort = match ($contentSortType) {
             'name'  =>                                             $contentNaturalSort,
-            default => "$contentSortTypeRaw $contentSortDirection, $contentNaturalSort",
+            default => "$contentSortTypeRawAdd $contentSortDirection, $contentNaturalSort",
         };
 
         // Сортировка дочерних альбомов
         $albumsSortType = $request->sortAlbums ?? SortAlbumType::values()[0];
+
+        $seed = $seed ?? (
+        $albumsSortType === 'random'
+            ? mt_rand(100_000, 999_999)
+            : null
+        );
+
         $albumsSortTypeRaw = match ($albumsSortType) {
+            'random'   => 'RAND('.DB::getPdo()->quote($seed).')',
             'content'  => "content_sort_field",
             'medias'   => "medias_count",
             'images'   => "images_count",
@@ -244,7 +268,7 @@ class AlbumController extends Controller
             'created'  => "created_at",
             default    => $albumsSortType,
         };
-        $albumsSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
+        $albumsSortDirection = $request->has('reverseAlbums') ? 'DESC' : 'ASC';
         $albumNaturalSort    = "natural_sort_key $albumsSortDirection";
         $albumSort = match ($albumsSortType) {
             'name'  =>                                           $albumNaturalSort,
@@ -258,6 +282,18 @@ class AlbumController extends Controller
             $imagesLimitJoin = intval($request->images) ?? 0;
         else
             $imagesLimitJoin = 4;
+
+        $mediaTypes = [];
+        if ($request->types) {
+            foreach ($request->types as $type) {
+                $mediaTypes[] = match ($type) {
+                    MediaType::Image->value => 'image',
+                    MediaType::Video->value => 'video',
+                    MediaType::Audio->value => 'audio',
+                    MediaType::ImageAnimated->value => 'imageAnimated',
+                };
+            }
+        }
 
         // Подзапрос для content_sort_field
         $contentSortFieldSubquery = Image
@@ -276,10 +312,8 @@ class AlbumController extends Controller
                 .') as `content_sort_field`'));
         }
         else {
-            $columns = explode(',', $contentSortTypeRaw);
-            $selectColumn = $columns[count($columns) - 1];
             $contentSortFieldSubquery
-                ->selectRaw("$selectColumn as content_sort_field");
+                ->selectRaw("$contentSortTypeRaw as content_sort_field");
         }
 
         // Нужно ли подгружать дочерние альбомы?
@@ -307,10 +341,20 @@ class AlbumController extends Controller
                 ->orderByRaw($albumSort);
 
         if ($imagesLimitJoin) {
-            $withLoad['images'] = fn($q) => $q
-                ->withCount($contentSortType === 'reacts' ? 'reactions' : [])
-                ->orderByRaw($contentSort)
-                ->limit($imagesLimitJoin);
+            $withLoad['images'] = function ($query) use ($contentSortType, $contentSort, $imagesLimitJoin, $mediaTypes) {
+                $query
+                    ->orderByRaw($contentSort)
+                    ->limit($imagesLimitJoin);
+
+                if ($contentSortType === 'reacts')
+                    $query->withCount('reactions');
+
+                if (count($mediaTypes))
+                    $query->whereIn('type', $mediaTypes);
+
+                return $query;
+            };
+
             // FIXME: медленнее, чем запрос картинок на каждом альбоме
             //$withLoad['childAlbums.images'] = fn($q) => $q->orderByRaw($contentSort)->limit($imagesLimitJoin);
         }
@@ -354,6 +398,9 @@ class AlbumController extends Controller
                 if ($contentSortType === 'reacts')
                     $query->withCount('reactions');
 
+                if (count($mediaTypes))
+                    $query->whereIn('type', $mediaTypes);
+
                 // FIXME: быстрее, чем жадная загрузка
                 $child['imagesLoaded'] = $query->get();
             }
@@ -381,6 +428,9 @@ class AlbumController extends Controller
             // Обрезаем предков, начиная со следующего после первого "None"
             $targetAlbum->ancestors = $ancestors->slice($cutIndex + 1);
         }
+
+        if ($seed)
+            $targetAlbum->seed = $seed;
 
         return response(AlbumResource::make($targetAlbum));
     }

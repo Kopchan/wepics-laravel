@@ -3,6 +3,7 @@
 namespace App\Helpers;
 
 use App\Models\Image;
+use FFMpeg\Filters\Video\VideoFilters;
 use FFMpeg\Format\Video\X264;
 use FFMpeg\Media\AbstractVideo;
 use Illuminate\Support\Facades\Log;
@@ -18,7 +19,12 @@ class StreamHelper
     public static function extractPreview($videoPath, $video): ?string
     {
         $outputDir = Storage::path("thumbs/frames");
-        @mkdir($outputDir, 0775, true);
+        try {
+            @mkdir($outputDir, 0775, true);
+        }
+        catch (\Exception $e) {
+            Log::error("extractPreview {$e->getMessage()}");
+        }
 
         $ffprobe = FFProbe::create();
         $streams = $ffprobe->streams($videoPath);
@@ -50,16 +56,34 @@ class StreamHelper
             default => 'bin',
         };
 
+
         //$outputFile = "{$outputDir}/{$hash}.{$extension}";
         $outputFile = "{$outputDir}/{$hash}.png";
 
+//          ->addFilter('-c copy')
+
         FFMpeg::fromDisk('local')
             ->open(self::relativePath($videoPath))
-            ->getFrameFromSeconds(0)
+            ->addFilter([
+                '-map', '0:v',
+                '-map', '-0:V',
+            ])
             ->export()
-//          ->addFilter('-map 0:v:0')
-//          ->addFilter('-c copy')
             ->save(self::relativePath($outputFile));
+/*
+        FFMpeg::fromDisk('local')
+            ->open(self::relativePath($videoPath))
+            ->addFilter(['-map', 'disp:attached_pic'])
+            ->export()
+            ->save(self::relativePath($outputFile));
+
+        $streamIndex = $stream->get('index');
+        FFMpeg::fromDisk('local')
+            ->open(self::relativePath($videoPath))
+            ->addFilter(['-map', "0:$streamIndex"])
+            ->export()
+            ->save(self::relativePath($outputFile));
+*/
 
         return $outputFile;
     }
@@ -80,13 +104,13 @@ class StreamHelper
 
         return $outputFile;
     }
+
     /**
      * Формула оптимального битрейта
      */
     public static function calcKiloBitrate($width, $height, $framerate, $coef = 0.1): int {
         return $width * $height * $framerate * $coef / 1000;
     }
-
 
     /**
      * Создание из чего-то в видео для превью (без аудио, уменьшение до конкретного размера, битрейта и фреймрейта)
@@ -103,7 +127,7 @@ class StreamHelper
         float  $bitrateCoef  = 0.1,
         float  $maxBitrate   = 8000,
         float  $minBitrate   = 300,
-    ) {
+    ): string {
         // Путь до временного файла
         $tempFile = "temp/thumb_{$media->hash}_{$dimension}{$size}a.mp4";
 

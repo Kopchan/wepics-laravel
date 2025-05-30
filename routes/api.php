@@ -90,7 +90,9 @@ Route
             $image->middleware('token.auth:admin')->delete('', 'delete');
             $image->middleware('token.auth:admin')->patch ('', 'rename');
             $image->get('',         'info');
-            $image->get('orig',     'orig')->name('get.image.orig');
+            $image->get('orig',     'orig')
+                ->withoutMiddleware("throttle:api")
+                ->name('get.image.orig');
             $image->any('download', 'download');
             $image->get('thumb/{orient}{px}{ani?}', 'thumb')
                 ->where('orient', '[whWH]')

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AccessLevel;
 use App\Enums\ImageExtension;
+use App\Enums\MediaType;
 use App\Enums\SortType;
 use App\Exceptions\ApiDebugException;
 use App\Exceptions\ApiException;
@@ -21,6 +22,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
@@ -256,13 +258,19 @@ class ImageController extends Controller
         if ($tagsString)
             $searchedTags = explode(',', $tagsString);
 
-        $allowedSorts = SortType::values();
-        $sortType = $request->sort ?? $allowedSorts[0];
+        $sortType = $request->sort ?? SortType::values()[0];
+
+        $seed = $request->seed ?? (
+            $sortType === 'random'
+            ? mt_rand(100_000, 999_999)
+            : null
+        );
 
         $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
       //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
         $naturalSort = "natural_sort_key $sortDirection";
         $orderByRaw = match ($sortType) {
+            'random'     => 'RAND('.DB::getPdo()->quote($seed).')',
             'reacts'     => "reactions_count",
             'ratio'      => "width / height",
             'square'     => "ABS(GREATEST(width, height) / LEAST(width, height) - 1)",
@@ -276,10 +284,22 @@ class ImageController extends Controller
             'name'  => $naturalSort,
             default => "$orderByRaw $sortDirection, $naturalSort",
         };
-        //dd($orderByRaw, $sortDirection);
+
         $limit = intval($request->limit);
         if (!$limit)
             $limit = 30;
+
+        $types = [];
+        if ($request->types) {
+            foreach ($request->types as $type) {
+                $types[] = match ($type) {
+                    MediaType::Image->value => 'image',
+                    MediaType::Video->value => 'video',
+                    MediaType::Audio->value => 'audio',
+                    MediaType::ImageAnimated->value => 'imageAnimated',
+                };
+            }
+        }
 
         $isNested = $request->has('nested');
         $isForceNested = $request->nested == 'force'; // TODO: индексировать картинки и альбомы при рекурсивно усиленному
@@ -324,6 +344,9 @@ class ImageController extends Controller
         if ($sortType === 'reacts')
             $dbQuery->withCount('reactions');
 
+        if (count($types))
+            $dbQuery->whereIn('type', $types);
+
         //if ($isNested)
         //    $dbQuery->with('album');
 
@@ -358,13 +381,13 @@ class ImageController extends Controller
             'page'     => $imagesFromDB->currentPage(),
             'per_page' => $imagesFromDB->perPage(),
             'total'    => $imagesFromDB->total(),
-            'test' => [
-                $orderByRaw
-            ],
             'pictures' => !$isNested
                 ? ImageResource    ::collection($imagesFromDB->items())
                 : ImageLinkResource::collection($imagesFromDB->items()),
         ];
+
+        if ($seed)
+            $response['seed'] = $seed;
 
         if (
             !$isNested
@@ -373,11 +396,6 @@ class ImageController extends Controller
             && $accessLevel != AccessLevel::AsGuest
         )
             $response['sign'] = $album->getSign($user);
-
-
-        //dd(!$isNested, !$album->guest_allow, !!$user, $accessLevel != AccessLevel::AsGuest);
-
-        //dd($user, $accessLevel, $accessLevel != AccessLevel::AsGuest, $response, $imagesFromDB->toArray());
 
         return response($response);
     }
@@ -533,8 +551,13 @@ class ImageController extends Controller
         $image ??= Image::getByHashOrAlias($albumHash, $imageHash);
         $path = Storage::path('images'. $image->album->path . $image->name);
         //dd(base64url_encode(hash_file('xxh3', $path, true)));
-        ob_end_clean();
-        return response()->file($path);
+        //ob_end_clean();
+        //return response()->file($path);
+        //dd($path);
+        return response('ok', 200)->withHeaders([
+            'X-Sendfile' => $path,
+            'Content-Type' => File::mimeType($path),
+        ]);
     }
 
     public function download($albumHash, $imageHash)
