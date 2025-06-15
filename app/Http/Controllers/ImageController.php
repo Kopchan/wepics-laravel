@@ -268,7 +268,7 @@ class ImageController extends Controller
 
         $sortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
       //$naturalSort = "udf_NaturalSortFormat(name, 10, '.') $sortDirection";
-        $naturalSort = "natural_sort_key $sortDirection";
+        $naturalSort = "natural_sort_key";
         $orderByRaw = match ($sortType) {
             'random'     => 'RAND('.DB::getPdo()->quote($seed).')',
             'reacts'     => "reactions_count",
@@ -281,7 +281,7 @@ class ImageController extends Controller
             default      => $sortType,
         };
         $orderByRaw = match ($sortType) {
-            'name'  => $naturalSort,
+            'name'  => "$naturalSort $sortDirection",
             default => "$orderByRaw $sortDirection, $naturalSort",
         };
 

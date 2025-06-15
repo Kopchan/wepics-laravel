@@ -33,6 +33,7 @@ class Album extends Model
         'natural_sort_key',
     ];
 
+    // Функция переопределения внешнего id для родительского элемента ветки (NodeTrait)
     public function getParentIdName() {
         return 'parent_album_id';
     }

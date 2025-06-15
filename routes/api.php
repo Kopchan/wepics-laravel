@@ -24,17 +24,13 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 Route
 ::controller(SettingsController::class)
 ->group(function ($settings) {
-    $settings->get('',       'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки
+    $settings->get('',       ['public'])->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки
     $settings->get('setups', 'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки 2
 });
-
-Route::any('who', function () {
-    return [
-        'service' => 'Wepics',
-        'appname' => config('app.name'),
-    ];
-});
-
+Route::any('who', fn () => [
+    'service' => 'Wepics',
+    'appname' => config('app.name'),
+]);
 Route
 ::controller(UserController::class)
 ->prefix('users')
@@ -42,8 +38,9 @@ Route
     $users->post ('login' , 'login');
     $users->post ('reg'   , 'reg'  );
     $users->middleware('token.auth')->group(function ($authorized) {
-        $authorized->get  ('logout', 'logout'  );
+        $authorized->get  ('me',     'showSelf');
         $authorized->patch('',       'editSelf');
+        $authorized->post ('logout', 'logout'  );
     });
     $users->middleware('token.auth:admin')->group(function ($usersManage) {
         $usersManage->post('', 'create' );
@@ -65,8 +62,8 @@ Route
     $album->get('og.png', 'ogImage')->name('get.album.ogLegacy');
     $album->get('og', 'ogImage')->name('get.album.og');
     $album->get('ogView', 'ogView');
-    $album->get('reindex', 'reindex');
     $album->middleware('token.auth:admin')->group(function ($albumManage) {
+        $albumManage->get   ('reindex', 'reindex');
         $albumManage->post  ('', 'create');
         $albumManage->patch ('', 'update');
         $albumManage->delete('', 'delete');
@@ -83,38 +80,38 @@ Route
     $album
     ->controller(ImageController::class)
     ->prefix('images')
-    ->group(function ($albumImages) {
-        $albumImages->get('', 'showAll')->withoutMiddleware("throttle:api");
-        $albumImages->middleware('token.auth:admin')->post('', 'upload');
-        $albumImages->prefix('{image_hash}')->group(function ($image) {
-            $image->middleware('token.auth:admin')->delete('', 'delete');
-            $image->middleware('token.auth:admin')->patch ('', 'rename');
-            $image->get('',         'info');
-            $image->get('orig',     'orig')
-                ->withoutMiddleware("throttle:api")
+    ->group(function ($albumMedias) {
+        $albumMedias->get('', 'showAll')->withoutMiddleware('throttle:api');
+        $albumMedias->middleware('token.auth:admin')->post('', 'upload');
+        $albumMedias->prefix('{image_hash}')->group(function ($media) {
+            $media->middleware('token.auth:admin')->delete('', 'delete');
+            $media->middleware('token.auth:admin')->patch ('', 'rename');
+            $media->get('',         'info');
+            $media->get('orig',     'orig')
+                ->withoutMiddleware('throttle:api')
                 ->name('get.image.orig');
-            $image->any('download', 'download');
-            $image->get('thumb/{orient}{px}{ani?}', 'thumb')
+            $media->any('download', 'download');
+            $media->get('thumb/{orient}{px}{ani?}', 'thumb')
                 ->where('orient', '[whWH]')
                 ->where('px'    , '[0-9]+')
                 ->where('ani'   , '[a]')
-                ->withoutMiddleware("throttle:api")
+                ->withoutMiddleware('throttle:api')
                 ->name('get.image.thumb');
-            $image
+            $media
             ->controller(TagController::class)
             ->middleware('token.auth:admin')
             ->prefix('tags')
-            ->group(function ($imageTags) {
-                $imageTags->post  ('', 'set');
-                $imageTags->delete('', 'unset');
+            ->group(function ($mediaTags) {
+                $mediaTags->post  ('', 'set');
+                $mediaTags->delete('', 'unset');
             });
-            $image
+            $media
             ->controller(ReactionController::class)
             ->middleware('token.auth:user')
             ->prefix('reactions')
-            ->group(function ($imageReactions) {
-                $imageReactions->post  ('', 'set');
-                $imageReactions->delete('', 'unset');
+            ->group(function ($mediaReactions) {
+                $mediaReactions->post  ('', 'set');
+                $mediaReactions->delete('', 'unset');
             });
         });
     });

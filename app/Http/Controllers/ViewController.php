@@ -80,8 +80,7 @@ class ViewController extends Controller
             ::where ('alias', $albumHashOrAlias)
             ->orWhere('hash', $albumHashOrAlias)
             ->withCount([
-                'images as images_count' => fn($q) => $q->where  ('type',  'image'),
-                'images as videos_count' => fn($q) => $q->whereIn('type', ['video', 'imageAnimated']),
+                'childAlbums as albums_count',
             ])
             ->first();
         if (!$album || $album->getAccessLevelCached() === AccessLevel::None)

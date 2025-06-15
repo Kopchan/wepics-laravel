@@ -16,12 +16,11 @@ use App\Models\Album;
 use App\Models\AlbumAlias;
 use App\Models\Image;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Nette\NotImplementedException;
 use Spatie\Browsershot\Browsershot;
 
 class AlbumController extends Controller
@@ -225,12 +224,12 @@ class AlbumController extends Controller
         $contentSortTypeRaw = match ($contentSortType) {
             'random'     => 'RAND('.DB::getPdo()->quote($seed).')',
             'reacts'     => "reactions_count",
-            'ratio'      => "width / height",
-            'square'     => "ABS(GREATEST(width, height) / LEAST(width, height) - 1)",
-            'frames'     => "frames_count IS NULL, frames_count",
-            'duration'   => "duration_ms IS NULL, duration_ms",
-            'framerate'  => "avg_frame_rate_den IS NULL, avg_frame_rate_num / avg_frame_rate_den",
-            'bitrate'    => "duration_ms IS NULL, size * 8 / duration_ms * 1000",
+            'ratio'      => 'width / height',
+            'square'     => 'ABS(GREATEST(width, height) / LEAST(width, height) - 1)',
+            'frames'     => 'frames_count',
+            'duration'   => 'duration_ms',
+            'framerate'  => 'avg_frame_rate_num / avg_frame_rate_den',
+            'bitrate'    => 'size * 8 / duration_ms * 1000',
             default      => $contentSortType,
         };
         $contentSortTypeRawAdd = match ($contentSortType) {
@@ -241,9 +240,9 @@ class AlbumController extends Controller
             default      =>                                 $contentSortTypeRaw,
         };
         $contentSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
-        $contentNaturalSort   = "natural_sort_key $contentSortDirection";
+        $contentNaturalSort   = "natural_sort_key";
         $contentSort = match ($contentSortType) {
-            'name'  =>                                             $contentNaturalSort,
+            'name'  =>                                               "$contentNaturalSort $contentSortDirection",
             default => "$contentSortTypeRawAdd $contentSortDirection, $contentNaturalSort",
         };
 
@@ -258,20 +257,20 @@ class AlbumController extends Controller
 
         $albumsSortTypeRaw = match ($albumsSortType) {
             'random'   => 'RAND('.DB::getPdo()->quote($seed).')',
-            'content'  => "content_sort_field",
-            'medias'   => "medias_count",
-            'images'   => "images_count",
-            'videos'   => "videos_count",
-            'audios'   => "audios_count",
-            'albums'   => "albums_count",
-            'indexed'  => "last_indexation",
-            'created'  => "created_at",
+            'content'  => 'content_sort_field',
+            'medias'   => 'medias_count',
+            'images'   => 'images_count',
+            'videos'   => 'videos_count',
+            'audios'   => 'audios_count',
+            'albums'   => 'albums_count',
+            'indexed'  => 'last_indexation',
+            'created'  => 'created_at',
             default    => $albumsSortType,
         };
         $albumsSortDirection = $request->has('reverseAlbums') ? 'DESC' : 'ASC';
-        $albumNaturalSort    = "natural_sort_key $albumsSortDirection";
+        $albumNaturalSort    = "natural_sort_key";
         $albumSort = match ($albumsSortType) {
-            'name'  =>                                           $albumNaturalSort,
+            'name'  =>                                          "$albumNaturalSort $albumsSortDirection",
             default => "$albumsSortTypeRaw $albumsSortDirection, $albumNaturalSort",
         };
         $albumOrderLevel = $request->has('disrespect') ? '' : 'order_level DESC, ';
@@ -469,8 +468,11 @@ class AlbumController extends Controller
             if (Storage::exists($newPath))
                 throw new ApiException(409, 'Album with this internal name already exist');
 
-            Storage::move($oldLocalPath, $newLocalPath);
-            $album->path = $newPath;
+//            Storage::move($oldLocalPath, $newLocalPath);
+//            $album->path = $newPath;
+
+            # TODO: переименовать все с такой же частью пути в БД
+            # TODO: Защиту
         }
 
         // Отображаемое имя
@@ -508,16 +510,17 @@ class AlbumController extends Controller
 
     public function delete($hash)
     {
-        $album = Album::getByHash($hash);
-        $path = Storage::path("images$album->path");
-
-        if ($album->path == '/')
-            File::cleanDirectory($path);
-        else
-            File::deleteDirectory($path);
-
-        $album->delete();
-        return response(null, 204);
+//        $album = Album::getByHash($hash);
+//        $path = Storage::path("images$album->path");
+//
+//        if ($album->path == '/')
+//            File::cleanDirectory($path);
+//        else
+//            File::deleteDirectory($path);
+//
+//        $album->delete();
+//        return response(null, 204);
+        throw new NotImplementedException('Cannot delete album');
     }
 
     public function ogView($hashOrAlias)

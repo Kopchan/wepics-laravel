@@ -121,7 +121,7 @@ class StreamHelper
         string $outputPath,
         string $dimension    = 'q',
         int    $size         = 240,
-        float  $duration     = 600,
+        float  $duration     = 60,
         float  $maxFramerate = 60,
         float  $ecoFramerate = 30,
         float  $bitrateCoef  = 0.1,

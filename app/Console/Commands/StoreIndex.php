@@ -346,11 +346,11 @@ class StoreIndex extends Command
 
                     $steamContentFields = [];
 
-                    if ($type === 'image' && $probeInfo->get('duration_ts') > 1)
+                    if ($type === 'image' && ($probeInfo?->get('duration_ts') ?? 0) > 1)
                         $type = 'imageAnimated';
 
                     if ($type !== 'image') {
-                        if (!($probeInfo->get('duration_ts'))) {
+                        if (!($probeInfo?->get('duration_ts'))) {
                             $this->line("<fg=red>\r× "
                                 . $counter
                                 ." <fg=blue;href=file:///$file>$name</>"

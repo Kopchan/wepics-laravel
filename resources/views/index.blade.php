@@ -33,10 +33,9 @@
             }
 
             if ($duration || $size) {
-              $totaling = $duration ?: $size;
-              $tail = ($size)
-                ? $totaling .' and '. $size
-                : $totaling;
+              $tail = ($duration &&  $size)
+                    ? "$duration and $size"
+                    : ($duration ??  $size);
 
               $description .= ($hasCounters ? ', totaling ' : ' with totaling '). $tail;
             }
@@ -63,7 +62,12 @@
         <meta name="twitter:image"           content="{{ $image->urlThumbRoute }}" />
         @if($image->type === 'video' || $image->type === 'imageAnimated')
           <meta property="og:description"    content="Explore {{
-            $album->videos_count > 1 ? ($album->videos_count - 1)." more videos in " : ''
+            (($album?->videos_count ?? 0) > 1
+            ? ($album->videos_count - 1)." more videos in "
+            : (($album?->albums_count ?? 0) > 1
+              ? "$album->albums_count sub-albums in "
+              : ''
+            ))
           }}{{ $album->name }}" />
           <meta property="og:type"           content="video.other" />
           <meta property="og:video:width"    content="{{ $image->width }}" />
@@ -76,7 +80,12 @@
           <meta name="twitter:player"        content="{{ $image->urlOrigRoute }}" />
         @else
           <meta property="og:description"    content="Explore {{
-            $album->images_count > 1 ? ($album->images_count - 1)." more images in " : ''
+            (($album?->images_count ?? 0) > 1
+            ? ($album->images_count - 1)." more images in "
+            : (($album?->albums_count ?? 0) > 1
+              ? "$album->albums_count sub-albums in "
+              : ''
+            ))
           }}{{ $album->name }}" />
           <meta name="twitter:card"          content="summary_large_image">
          @endif
@@ -108,8 +117,8 @@
     <link rel="icon"             type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="apple-touch-icon" type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
     <link rel="icon"             type="image/svg+xml"             href="/favicon/icon.svg">
-    <script type="module" crossorigin src="/assets/index-DjvJRFZP.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BCQJSBTa.css">
+    <script type="module" crossorigin src="/assets/index-gV8p_DoE.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CBoDdJGe.css">
   </head>
   <body>
     <div id="app"></div>
