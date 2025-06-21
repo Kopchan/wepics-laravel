@@ -441,7 +441,7 @@ class AlbumController extends Controller
 
         $path = "images$parentAlbum->path$newFolderName";
         if (Storage::exists($path))
-            throw new ApiException(409, 'Album with this name already exist');
+            throw new ApiException(409, 'Album with this internal name already exist');
 
         $name = $request->customName ?? basename($path);
 
@@ -450,8 +450,10 @@ class AlbumController extends Controller
             'name' => $name,
             'path' => $path,
             'hash' => Str::random(25),
-            'parent_album_id' => $parentAlbum->id
+            'owner_user_id' => $parentAlbum->owner_user_id,
         ]);
+        $newAlbum->appendToNode($parentAlbum);
+        $newAlbum->save();
         return response($newAlbum);
     }
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
@@ -52,6 +53,8 @@ Route
         });
     });
 });
+Route::get('albums', [AlbumController::class, 'ownAndAccessible'])
+    ->middleware('token.auth:user');
 Route
 ::middleware('token.auth:guest')
 ->controller(AlbumController::class)
@@ -62,7 +65,10 @@ Route
     $album->get('og.png', 'ogImage')->name('get.album.ogLegacy');
     $album->get('og', 'ogImage')->name('get.album.og');
     $album->get('ogView', 'ogView');
-    $album->middleware('token.auth:admin')->group(function ($albumManage) {
+    $album->post('invite',
+        [InvitationController::class, 'store']) // Генерировать код приглашения на СВОЙ альбом
+        ->middleware('token.auth:owner');
+    $album->middleware('token.auth:owner')->group(function ($albumManage) {
         $albumManage->get   ('reindex', 'reindex');
         $albumManage->post  ('', 'create');
         $albumManage->patch ('', 'update');
@@ -70,36 +76,36 @@ Route
     });
     $album
     ->controller(AccessController::class)
-    ->middleware('token.auth:admin')
+    ->middleware('token.auth:owner')
     ->prefix('access')
     ->group(function ($albumRights) {
         $albumRights->get   ('', 'showAll');
         $albumRights->post  ('', 'create' );
-        $albumRights->delete('', 'delete');
     });
+    $album->delete('access/{?user_id}', [AccessController::class, 'delete']);
     $album
     ->controller(ImageController::class)
     ->prefix('images')
     ->group(function ($albumMedias) {
         $albumMedias->get('', 'showAll')->withoutMiddleware('throttle:api');
-        $albumMedias->middleware('token.auth:admin')->post('', 'upload');
+        $albumMedias->middleware('token.auth:owner')->post('', 'upload');
         $albumMedias->prefix('{image_hash}')->group(function ($media) {
-            $media->middleware('token.auth:admin')->delete('', 'delete');
-            $media->middleware('token.auth:admin')->patch ('', 'rename');
+            $media->middleware('token.auth:owner')->delete('', 'delete');
+            $media->middleware('token.auth:owner')->patch ('', 'rename');
             $media->get('',         'info');
             $media->get('orig',     'orig')
                 ->withoutMiddleware('throttle:api')
                 ->name('get.image.orig');
             $media->any('download', 'download');
             $media->get('thumb/{orient}{px}{ani?}', 'thumb')
-                ->where('orient', '[whWH]')
+                ->where('orient', '[whqWHQ]')
                 ->where('px'    , '[0-9]+')
                 ->where('ani'   , '[a]')
                 ->withoutMiddleware('throttle:api')
                 ->name('get.image.thumb');
             $media
             ->controller(TagController::class)
-            ->middleware('token.auth:admin')
+            ->middleware('token.auth:owner')
             ->prefix('tags')
             ->group(function ($mediaTags) {
                 $mediaTags->post  ('', 'set');
@@ -115,6 +121,14 @@ Route
             });
         });
     });
+});
+Route
+::controller(InvitationController::class)
+->prefix('invitation/{invite_code}')
+->group(function ($invite) {           // [ПРИГЛАШЕНИЕ]
+    $invite->get('album', 'album');    // Просмотр содержимого альбома по приглашению
+    $invite->post('join', 'join');     // Присоединиться к альбому (добавление доступа)
+    $invite->delete(  '', 'destroy');  // Удалить СВОЙ код приглашения
 });
 Route
 ::middleware('token.auth:guest')

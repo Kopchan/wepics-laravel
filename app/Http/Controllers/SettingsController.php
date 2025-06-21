@@ -14,21 +14,22 @@ class SettingsController extends Controller
     // Получение публичных/общих предустановок
     public function public()
     {
+        $spaceInfo = SpaceInfo::getCached();
         $settings = Cache::remember('public_settings', (7 * 24 * 60 * 60), fn () => [
+            'default_quota_bytes'       => config('setups.default_quota_bytes'),
+            'allowed_preview_sizes'     => config('setups.allowed_preview_sizes'),
             'allowed_image_extensions'  => config('setups.allowed_image_extensions'),
             'allowed_video_extensions'  => config('setups.allowed_video_extensions'),
             'allowed_audio_extensions'  => config('setups.allowed_audio_extensions'),
-            'allowed_preview_sizes'     => config('setups.allowed_preview_sizes'),
-            'reactions'   => Reaction ::all(),
             'age_ratings' => AgeRating::all(),
+            'reactions'   => Reaction ::all(),
         ]);
 
-        $spaceInfo = SpaceInfo::getCached();
-        return response()->json([
+        return response([
             'setups' => [
-                ...$settings,
                 'is_upload_disabled' => $spaceInfo->isUploadDisabled,
-            ],
+                ...$settings,
+            ]
         ]);
     }
 

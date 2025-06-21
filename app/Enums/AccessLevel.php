@@ -11,5 +11,6 @@ enum AccessLevel: string
     case None = 'none';
     case AsGuest = 'guest';
     case AsAllowedUser = 'user';
+    case AsOwner = 'owner';
     case AsAdmin = 'admin';
 }

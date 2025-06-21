@@ -14,8 +14,8 @@ class UserLoginRequest extends ApiRequest
     public function rules(): array
     {
         return [
-            'login'    => 'required|string|min:2',
-            'password' => 'required|string|min:8',
+            'login'    => 'required|string',
+            'password' => 'required|string',
         ];
     }
 }

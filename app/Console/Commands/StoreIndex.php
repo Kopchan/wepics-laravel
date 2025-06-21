@@ -37,10 +37,12 @@ class StoreIndex extends Command
         //$this->output->getFormatter()->setStyle('error'  , new OutputFormatterStyle('red' ));
         $this->output->getFormatter()->setStyle('comment', new OutputFormatterStyle('gray'));
 
+        // Устранение конфликтов иерархии
         $this->line('Fixing tree...');
         Album::fixTree();
         $this::newLine();
 
+        // Получение всех альбомов
         $this->line('Get all albums...');
         $albums = Album
             ::query()
@@ -49,14 +51,18 @@ class StoreIndex extends Command
             ->orderBy('path')                                          // Сортировка по алфавиту
             ->get();
         $this::newLine();
+
+        // Разрешённые расширения
         $allowedImageExtensions = config('setups.allowed_image_extensions');
         $allowedVideoExtensions = config('setups.allowed_video_extensions');
         $allowedAudioExtensions = config('setups.allowed_audio_extensions');
 
         //if (!$this->confirm('Do you wish index albums? ['. $albums->count() .' in DB already]', true)) return;
 
+        // Драйвер FFProbe для получения информации из видео/аудио файлов
         $probe = FFProbe::create();
 
+        // Если была указана опция "начать с", то пробуем искать такое альбом и ставим как начальный ключ, если найден
         $startFrom = $this->option('start-from');
         if (!$startFrom)
             $currentAlbumKey = 0;
@@ -71,6 +77,7 @@ class StoreIndex extends Command
             return;
         }
 
+        // Проход по альбомам
         while ($albums->count() > $currentAlbumKey) {
             $currentAlbum = $albums[$currentAlbumKey];
             $path = Storage::path("images$currentAlbum->path");
@@ -83,11 +90,13 @@ class StoreIndex extends Command
                 ." <bg=gray;fg=black;href=file:///$path> 📁 $currentAlbum->path </></> "
             );
 
+            // Попытка получить все дочерние директории в альбоме
             try {
                 $folders = File::directories($path);
             }
             catch (DirectoryNotFoundException $e)
             {
+                // Альбом не найден, спрашиваем "удалить ли", если не было передано опции авто-удаления
                 $this->error(' DELETED ');
                 if (!Album::find($currentAlbum->id)) continue;
 
@@ -99,15 +108,17 @@ class StoreIndex extends Command
                 continue;
             }
 
-            //$childrenInDB = $album->childAlbums->toArray();
+            // Дочерние альбомы из БД
             $albumChildren = $albums->where('parent_album_id', $currentAlbum->id);
             //$keysToForget = [];
-            // Проход по папкам альбома (дочерние альбомы)
+            // Отображаем сколько в файловой системе и в базе данных альбомов
             $this->line('Checking folders in album ['
                 . count($folders) .' in FS / '
                 . $albumChildren->count() .' in DB]'
             );
             $newAlbums = [];
+
+            // Проход по папкам альбома (дочерние альбомы)
             foreach ($folders as $folder) {
                 $childPath = $currentAlbum->path . basename($folder) .'/';
                 $basename = basename($childPath);
@@ -124,6 +135,7 @@ class StoreIndex extends Command
                     $albumChildren->forget($key);
                 }
                 else {
+                    // Создание, прикрепление как дочернего (appendToNode) и сохранение в БД
                     $hash = Str::random(25);
                     $childAlbum = Album::create([
                         'name' => $basename,
@@ -140,7 +152,7 @@ class StoreIndex extends Command
                     );
                 }
             }
-            //dd($keysToForget, $albumChildren->toArray());
+            // Отображение всех не найденных альбомов
             foreach ($albumChildren as $key => $notFoundedAlbum) {
                 $this->line('<fg=red>- '
                     ."<fg=red;href=". url("../album/$notFoundedAlbum->hash") .">$notFoundedAlbum->hash</> "
@@ -154,6 +166,7 @@ class StoreIndex extends Command
             }
             $albums->splice($currentAlbumKey, 0, $newAlbums);
 
+            // Спрашиваем "удалить ли не найденные альбомы", если не было передано опции авто-удаления
             $notFoundedCount = $albumChildren->count();
             if ($this->option('auto-destroy') || (
                 $notFoundedCount &&
@@ -238,7 +251,7 @@ class StoreIndex extends Command
                     }
                     //dd('end_here', array_search($name, $imagesNames), $name, $imagesNames, $images, $imagesInDB);
 
-                    // Отсекание не-картинок по расширению файла
+                    // Отсекание не-медиа по расширению файла, определение типа
                     $extension = pathinfo($file, PATHINFO_EXTENSION);
                     $extension = strtolower($extension);
                     if (in_array($extension, $allowedImageExtensions))
@@ -338,9 +351,9 @@ class StoreIndex extends Command
                         }
                     }
 
+                    // Получение информации об основном потоку
                     if ($type !== 'audio')
                         $probeInfo = $probe->streams($file)->videos()->first();
-
                     else
                         $probeInfo = $probe->streams($file)->audios()->first();
 
@@ -421,6 +434,7 @@ class StoreIndex extends Command
                     continue;
                 }
             }
+            // Отображение не найденных медиа
             $notFoundedDuplicas = [];
             $notFoundedOrigs = [];
             foreach ($notFoundedImages as $key => $notFoundedImage) {
@@ -447,6 +461,7 @@ class StoreIndex extends Command
                     $this->error($e);
                 }
             }
+            // Спрашиваем "удалить ли не найденные медиа", если не было передано опции авто-удаления
             $notFoundedCount = count($notFoundedImages);
             if ($this->option('auto-destroy') || (
                 $notFoundedCount &&

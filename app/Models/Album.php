@@ -4,15 +4,13 @@ namespace App\Models;
 
 use App\Enums\AccessLevel;
 use App\Exceptions\ApiException;
+use Closure;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Kalnoy\Nestedset\NodeTrait;
-use phpDocumentor\Reflection\Types\Static_;
-use Staudenmeir\EloquentEagerLimit\HasEagerLimit;
 
 class Album extends Model
 {
@@ -24,6 +22,7 @@ class Album extends Model
         'alias',
         'path',
         'hash',
+        'owner_user_id',
         'last_indexation',
         'parent_album_id',
         'guest_allow',
@@ -73,43 +72,14 @@ class Album extends Model
     /**
      * Получение альбома по его уникальному хешу
      */
-    static public function getByHash($hash): Album
+    static public function getByHash($hash, $modifyQuery = null): Album
     {
-        if ($hash != 'root') {
-            $album = Album::where('hash', $hash)->first();
-            if (!$album)
-                throw new ApiException(404, "Album with hash \"$hash\" not found");
-        }
-        else {
-            $album = Album::where('path', '/')->first();
-            if (!$album)
-                $album =  Album::create([
-                    'name' => '',
-                    'path' => '/',
-                    'hash' => 'root',
-                ]);
-        }
-        return $album;
-    }
-    /**
-     * Получение альбома по его уникальному хешу или алиасам
-     */
-    static public function getByHashOrAlias($hashOrAlias, $modifyQuery = null): Album
-    {
+        $user = request()->user();
         $query = Album::query();
         if ($modifyQuery)
             $modifyQuery($query);
 
-        if ($hashOrAlias !== 'root') {
-            $album = $query
-                ->where  ('hash' , $hashOrAlias)
-                ->orWhere('alias', $hashOrAlias)
-                ->first();
-
-            if (!$album)
-                throw new ApiException(404, "Album with \"$hashOrAlias\" not found");
-        }
-        else {
+        if ($hash === 'root') {
             $album = $query->firstOrCreate([
                 'path' => '/'
             ], [
@@ -117,6 +87,74 @@ class Album extends Model
                 'hash' => 'root',
             ]);
         }
+        else if ($hash === 'my' && $user !== null) {
+            $album = $query->firstOrCreate([
+                'path' => "/../users/$user->id/"
+            ], [
+                'name' => "User #{$user->id} root album",
+                'hash' => Str::random(25),
+                'owner_user_id' => $user->id,
+            ]);
+        }
+        else {
+            $album = Album::where('hash', $hash)->first();
+            if (!$album)
+                throw new ApiException(404, "Album with hash \"$hash\" not found");
+        }
+        return $album;
+    }
+
+    /** Получение альбома по его уникальному хешу или алиасам.
+     * Может содавать корневой альбом пользователя или сервера
+     * @param string  $hashOrAlias хеш или алиас
+     * @param Closure $modifyQuery
+     * @return Album найденная модель альбома с выполненным modifyQuery
+     * @throws ApiException 404 не найденная модель
+     */
+    static public function getByHashOrAlias(string $hashOrAlias, Closure $modifyQuery = null): Album
+    {
+        $user = request()->user();
+        $query = Album::query();
+        if ($modifyQuery)
+            $modifyQuery($query);
+
+        // Если запрошен корневой альбом сервера, то генерируем и возвращаем, если нет
+        if ($hashOrAlias === 'root') {
+            $album = $query->firstOrCreate([
+                'path' => '/'
+            ], [
+                'name' => '',
+                'hash' => 'root',
+            ]);
+        }
+        // Если запрошен корневой альбом пользователя, то генерируем и возвращаем, если нет
+        else if ($hashOrAlias === 'my' && $user !== null) {
+            $album = $query->firstOrCreate([
+                'path' => "/../users/$user->id/"
+            ], [
+                'name' => "User #{$user->id} root album",
+                'hash' => Str::random(25),
+                'owner_user_id' => $user->id,
+            ]);
+        }
+        // Ищем альбом по хешу, первичному и вторичному алисасу
+        else {
+            $album = $query
+                ->where('hash', $hashOrAlias)
+                ->orWhere('alias', $hashOrAlias)
+                ->first();
+
+            if (!$album) {
+                // Ищем по вторичные алиасам
+                $album = $query
+                    ->join((new AlbumAlias())->getTable() .' as aliases', 'albums.id', '=', 'aliases.album_id')
+                    ->where('aliases.name', $hashOrAlias)
+                    ->first();
+            }
+        }
+        if (!$album)
+            throw new ApiException(404, "Album with \"$hashOrAlias\" not found");
+
         return $album;
     }
 
@@ -191,9 +229,15 @@ class Album extends Model
             //    dd($result, $cacheKey, Cache::get($cacheKey));
         }
 
+        if ($user && $this->owner_user_id === $user->id) {
+            $result = AccessLevel::AsOwner;
+            Cache::put($cacheKey, $result, static::ACCESS_CACHE_TTL);
+        }
+
         $result ??= Cache::get($cacheKey);
 
         if ($result === null) {
+            // TODO: пишет в кеш как batch, отрицательное тоже, надо же на админа проверять
             $result = Album::getAccessLevelBatchById($this->id, $user?->id);
         }
 

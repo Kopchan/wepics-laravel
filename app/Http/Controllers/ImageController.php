@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Cacheables\SpaceInfo;
 use App\Enums\AccessLevel;
 use App\Enums\ImageExtension;
 use App\Enums\MediaType;
@@ -18,17 +19,13 @@ use App\Jobs\GeneratePreviewVideo;
 use App\Models\Album;
 use App\Models\Image;
 use App\Models\ImageDuplica;
-use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
+use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Validator;
 use Intervention\Image\Laravel\Facades\Image as Intervention;
 use Illuminate\Support\Facades\Storage;
+use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
 class ImageController extends Controller
 {
@@ -153,7 +150,7 @@ class ImageController extends Controller
                 $imagesNames[] = $name;
                 $imagesHashes[] = $hash;
             }
-            catch (\Exception $ex) {
+            catch (Exception $ex) {
                 if ($ex instanceof ApiDebugException)
                     throw $ex;
 
@@ -168,75 +165,199 @@ class ImageController extends Controller
 
     public function upload(UploadRequest $request, $albumHash)
     {
+        $user = $request->user();
         $album = Album::getByHash($albumHash);
         $files = $request->file('images');
-        $path = "images$album->path";
-        $allowedExts = array_column(ImageExtension::cases(), 'value');
-        $allowedExitsImploded = implode(',', $allowedExts);
+
+        // Получаем сколько сейчас занято на диске, если достигли предела - выводим ошибку
+        $spaceInfo = SpaceInfo::getCached();
+        if ($spaceInfo->isUploadDisabled)
+            throw new ApiException(400, 'Server in read-only mode');
+
+        // Получаем сколько сейчас весят пользовательское медиа и какой лимит по загрузкам
+        $currentStorageSize = $user->quotaUsed();
+        $maxStorageSize = $user->quotaTotal();
+
+        // Путь альбома для сохранения
+        $pathToSave = "users/$user->id/$album->path";
+
+        // Разрешённые расширения
+        $allowedImageExtensions = config('setups.allowed_image_extensions');
+        $allowedVideoExtensions = config('setups.allowed_video_extensions');
+        $allowedAudioExtensions = config('setups.allowed_audio_extensions');
+
+        // Массивы для ответа
+        $errored    = [];
+        $successful = [];
+
+        // Драйвер FFProbe для получения информации из видео и аудио
+        $probe = FFProbe::create();
 
         $responses = [];
-        foreach ($files as $file) {
-            $fileName = $file->getClientOriginalName();
-            $fileExt  = $file->extension();
+        foreach ($files as $key => $pictureInRequests) {
+            $file = $request->file("images.$key.file");
+            $date = $pictureInRequests['date'] ?? now();
+            $filename = $pictureInRequests['name'] ?? $file->getClientOriginalName();
 
-            // Валидация файла
-            $validator = Validator::make(['file' => $file], [
-                'file' => ['mimes:'. $allowedExitsImploded],
-            ]);
-            if ($validator->fails()) {
-                // Сохранение плохого ответа API
-                $responses['errored'][] = [
-                    'name'    => $fileName,
-                    'message' => $validator->errors(),
+            $extReq = pathinfo($filename, PATHINFO_EXTENSION);
+            $extReal = $file->guessExtension() ?? $file->extension();
+            if ($extReal != null && $extReal != $extReq)
+                $filename .= ".$extReal";
+
+            // Пропуск файла с не найденного в разрешённых расширению, иначе определяется тип
+            $extDown = strtolower($extReal);
+            if (in_array($extDown, $allowedImageExtensions))
+                $type = 'image';
+            else
+            if (in_array($extDown, $allowedVideoExtensions))
+                $type = 'video';
+            else
+            if (in_array($extDown, $allowedAudioExtensions))
+                $type = 'audio';
+            else {
+                $errored[] = [
+                    'name'    => $filename,
+                    'code'    => 1409,
+                    'message' => "\".$extDown\" not support/allowed",
                 ];
                 continue;
             }
 
-            // Проверка существования того же файла
-            $imageHash = hash_file('xxh3', $file);
+            // Проверяем, превышает ли размер лимит
+            $filesize = $file->getSize();
+            if ($currentStorageSize + $filesize >= $maxStorageSize) {
+                $errored[] = [
+                    'name'    => $filename,
+                    'code'    => 1410,
+                    'message' => 'Storage limit reached',
+                    'debug1' => $currentStorageSize + $filesize >= $maxStorageSize,
+                    'debug2' => $currentStorageSize,
+                    'debug3' => $filesize,
+                    'debug4' => $maxStorageSize,
+                ];
+                continue;
+            }
 
-            $image = Image
+            // Проверка, существует ли картинка с таким хешем и пропускаем если да
+            $tmpPath = $file->getRealPath();
+            $hash = hash_file('xxh3', $tmpPath);
+            $existedImageByHash = Image
                 ::where('album_id', $album->id)
-                ->where('hash', $imageHash)
+                ->where('hash', $hash)
                 ->first();
-
-            if ($image) {
-                // Сохранение плохого ответа API
-                $responses['errored'][] = [
-                    'name'    => $fileName,
-                    'message' => "Image with this hash \"$imageHash\" already exist in this album",
+            if ($existedImageByHash) {
+                $errored[] = [
+                    'name' => $filename,
+                    'code' => 1203,
+                    'message' => 'Already exist with this hash',
+                    'image' => ImageResource::make($existedImageByHash),
                 ];
                 continue;
             }
 
-            // Наименование повторяющихся
-            $fileNameNoExt = basename($fileName, ".$fileExt");
-            $num = 1;
-            while (Storage::exists("$path$fileName")) {
-                $fileName = "$fileNameNoExt ($num).$fileExt";
-                $num++;
+            // Сохранение в другом названии, если есть какой-то запрещённый символ в названии
+            if (!preg_match('~^[^/\\\\:*?"<>|]+$~u', $filename))
+                $filename = $hash . ".$extReal";
+
+            // Проверка, существует ли картинка с таким именем и модифицируем имя счётчиком если да
+            $counter = 1;
+            $extension      = pathinfo($filename, PATHINFO_EXTENSION);
+            $nameWithoutExt = pathinfo($filename, PATHINFO_FILENAME);
+            $filenameValid = $filename;
+            while (Image
+                ::where('album_id', $album->id)
+                ->where('name', $filenameValid)
+                ->exists()
+            ) {
+                $counter++;
+                $filenameValid = "$nameWithoutExt ($counter).$extension";
             }
 
             // Сохранение файла в хранилище
-            $file->storeAs($path,$fileName);
+            $file->storeAs($pathToSave, $filenameValid);
 
-            $sizes = getimagesize(Storage::path($path.$fileName));
+            // Получение размеров картинки, если нет размеров (не получили) — пропуск
+            if ($type === 'image') {
+                $sizes = getimagesize($file); // TODO: на перевёрнутых JPG даёт те же размеры
+                if (!$sizes) {
+                    $errored[] = [
+                        'name' => $filename,
+                        'code' => 1413,
+                        'message' => 'Cannot grab size of image',
+                        'image' => ImageResource::make($existedImageByHash),
+                    ];
+                    continue;
+                }
+            }
+
+            if ($type !== 'audio')
+                $probeInfo = $probe->streams($file)->videos()->first();
+
+            else
+                $probeInfo = $probe->streams($file)->audios()->first();
+
+            $steamContentFields = [];
+
+            if ($type === 'image' && ($probeInfo?->get('duration_ts') ?? 0) > 1)
+                $type = 'imageAnimated';
+
+            if ($type !== 'image') {
+                if (!($probeInfo?->get('duration_ts'))) {
+                    $errored[] = [
+                        'name' => $filename,
+                        'code' => 1413,
+                        'message' => 'Cannot grab duration_ts',
+                        'image' => ImageResource::make($existedImageByHash),
+                    ];
+                    continue;
+                }
+                $steamContentFields['codec_name'] = $probeInfo->get('codec_name');
+
+                $number = $probeInfo->get('duration');
+                if (!str_contains($number, '.')) $number .= '.000';
+                [$intPart, $decimalPart] = explode('.', $number, 2);
+                $decimalPart = substr($decimalPart . '000', 0, 3);
+                $steamContentFields['duration_ms'] = (int)($intPart . $decimalPart);
+
+                if ($type !== 'audio') {
+                    $sizes = [
+                        $probeInfo->get('width'),
+                        $probeInfo->get('height')
+                    ];
+
+                    $framerate = array_map('intval',
+                        explode('/', $probeInfo->get('avg_frame_rate'))
+                    );
+                    $steamContentFields['avg_frame_rate_num'] = $framerate[0];
+                    $steamContentFields['avg_frame_rate_den'] = $framerate[1];
+                    $steamContentFields['frame_count'] = (int)$probeInfo->get('nb_frames');
+                }
+                else {
+                    $sizes = [500, 500]; // TODO: Читать из обложки аудио
+                }
+            }
 
             // Сохранение записи в БД
             $imageDB = Image::create([
-                'name' => $fileName,
-                'hash' => $imageHash,
-                'date' => Carbon::createFromTimestamp(Storage::lastModified($path.$fileName)),
-                'size' => Storage::size($path.$fileName),
+                'album_id' => $album->id,
+                'name' => $filenameValid,
+                'type' => $type,
+                'hash' => $hash,
+                'date' => $date,
+                'size' => $filesize,
                 'width'  => $sizes[0],
                 'height' => $sizes[1],
-                'album_id' => $album->id,
+                ...$steamContentFields,
             ]);
 
             // Сохранение успешного ответа API
-            $responses['successful'][] = ImageResource::make($imageDB);
+            $successful[] = ImageResource::make($imageDB);
         }
-        return response($responses);
+        return response([
+            'sign' => $album->getSign($user),
+            'successful' => $successful,
+            'errored' => $errored,
+        ]);
     }
 
     public function showAll(AlbumImagesRequest $request, $albumHash)
@@ -465,49 +586,23 @@ class ImageController extends Controller
 
             if ($animated) {
                 // Создание превью как mp4 видео
-                //StreamHelper::genPreviewVideo($mediaPath, $thumbPath, $orientation, $size);
-                //return response([
-                //    'message' => 'Started create video preview'
-                //], 202);
-
-
-                Cache::put('test', 'test');
-
                 GeneratePreviewVideo::dispatchSync($image, $mediaPath, $thumbPath, $orientation, $size);
-
-                //$job = GeneratePreviewVideo::dispatch($image, $mediaPath, $thumbPath, $orientation, $size);
-                //
-                //$result = null;
-                //$timeout = 60; // 60 секунд
-                //$startTime = time();
-                //
-                ////Cache::put('test', 'test');
-                //// Подписываемся на канал Redis и ждем
-                //$redis = Redis::connection()->client();
-                //dd($redis, Redis::connection(), $job);
-                //$redis->subscribe(["job.GeneratePreviewVideo.{$image->hash}{$orientation}{$size}"], function ($message) use (&$result) {
-                //    $data = json_decode($message, true);
-                //    $result = $data['result'];
-                //});
-
-                // Ожидание (неблокирующее)
-                //while (is_null($result) && (time() - $startTime) < $timeout) {
-                //    usleep(100_000); // 100ms задержка
-                //}
-                //
-                //if (is_null($result)) {
-                //    return response(['message' => 'Timeout after 60 seconds'], 504);
-                //}
-
             }
             else {
                 // Создание превью как webp картинку
                 $thumb = Intervention::read($imagePath);
 
-                if ($orientation == 'w')
-                    $thumb->scale(width: $size);
-                else
-                    $thumb->scale(height: $size);
+                switch ($orientation) {
+                    case 'w':
+                        $thumb->scaleDown(width: $size);
+                        break;
+                    case 'h':
+                        $thumb->scaleDown(height: $size);
+                        break;
+                    default:
+                        $thumb->coverDown($size, $size);
+                        break;
+                }
 
                 if (!Storage::exists($dirname))
                     Storage::makeDirectory($dirname);
@@ -581,35 +676,35 @@ class ImageController extends Controller
 
     public function rename(AlbumCreateRequest $request, $albumHash, $imageHash)
     {
-        $image = Image::getByHash($albumHash, $imageHash);
-        $imageExt = pathinfo($image->name, PATHINFO_EXTENSION);
-        $newName = $request->name;
-
-        $oldLocalPath = 'images'. $image->album->path . $image->name;
-        $newPath = $image->album->path ."$newName.$imageExt";
-        $newLocalPath = "images$newPath";
-        if (Storage::exists($newPath))
-            throw new ApiException(409, 'Album with this name already exist');
-
-        Storage::move($oldLocalPath, $newLocalPath);
-        $image->update([
-            'name' => basename($newPath),
-            'path' => "$newPath",
-        ]);
+//        $image = Image::getByHash($albumHash, $imageHash);
+//        $imageExt = pathinfo($image->name, PATHINFO_EXTENSION);
+//        $newName = $request->name;
+//
+//        $oldLocalPath = 'images'. $image->album->path . $image->name;
+//        $newPath = $image->album->path ."$newName.$imageExt";
+//        $newLocalPath = "images$newPath";
+//        if (Storage::exists($newPath))
+//            throw new ApiException(409, 'Album with this name already exist');
+//
+//        Storage::move($oldLocalPath, $newLocalPath);
+//        $image->update([
+//            'name' => basename($newPath),
+//            'path' => "$newPath",
+//        ]);
         return response(null, 204);
     }
 
     public function delete($albumHash, $imageHash)
     {
-        $image = Image::getByHash($albumHash, $imageHash);
-
-        $imagePath = 'images'. $image->album->path . $image->name;
-        Storage::delete($imagePath);
-
-        $thumbPath = "thumbs/*/$image->hash*";
-        File::delete(File::glob(Storage::path($thumbPath)));
-
-        $image->delete();
+//        $image = Image::getByHash($albumHash, $imageHash);
+//
+//        $imagePath = 'images'. $image->album->path . $image->name;
+//        Storage::delete($imagePath);
+//
+//        $thumbPath = "thumbs/*/$image->hash*";
+//        File::delete(File::glob(Storage::path($thumbPath)));
+//
+//        $image->delete();
 
         return response(null, 204);
     }

@@ -9,7 +9,13 @@ class UploadRequest extends ApiRequest
     public function rules(): array
     {
         return [
-            'images' => 'required|array',
+            'images'        => 'required|array|min:1',
+            'images.*.file' => 'required|file',
+            'images.*.date' => 'nullable|date',
+            'images.*.name' => [
+                'nullable',
+                'regex:~^[^/\\\\:*?"<>|]+$~u',
+            ],
         ];
     }
 }

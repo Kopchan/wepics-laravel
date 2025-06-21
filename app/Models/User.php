@@ -3,11 +3,13 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Cacheables\SpaceInfo;
 use App\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class User extends Authenticatable
@@ -17,12 +19,19 @@ class User extends Authenticatable
 
     // Заполняемые поля
     protected $fillable = [
-        'nickname', 'password', 'login'
+        'nickname',
+        'password',
+        'login',
+        'quota',
     ];
     // Скрытие поля пароля
     protected $hidden = ['password'];
-    // Хеширование пароля
-    protected $casts = ['password' => 'hashed'];
+
+    // Преобразование полей
+    protected $casts = [
+        'password' => 'hashed', // Хеширование пароля
+        'is_admin' => 'boolean', // Преобразование 1/0 из БД в true/false
+    ];
 
     // Получение модель пользователя по токену
     static public function getByToken($token): User
@@ -50,6 +59,38 @@ class User extends Authenticatable
         return $token->value;
     }
 
+
+    public function quotaUsed(): int
+    {
+        if (!$this->is_admin)
+            return $this->images()->sum('size');
+        else
+            return DB::table('images', 'i')
+                ->join((new Album)->getTable() .' as a', 'i.album_id', '=', 'a.id')
+                ->whereNull('a.owner_user_id')
+                ->sum('i.size');
+    }
+
+    public function quotaTotal(): int
+    {
+        if ($this->is_admin) {
+            $space = SpaceInfo::get();
+            $usedHim = $this->quotaUsed();
+            return $space->total - ($space->used - $usedHim);
+        }
+        else {
+            $userQuota = max(
+                config('setups.default_quota_bytes'),
+                $this->quota
+            );
+            $diskLimitedQuota = min(
+                SpaceInfo::getCached()->free,
+                $userQuota,
+            );
+            return $diskLimitedQuota;
+        }
+    }
+
     // Связи
     public function accessRights() {
         return $this->hasMany(AccessRight::class);
@@ -62,5 +103,17 @@ class User extends Authenticatable
     }
     public function tokens() {
         return $this->hasMany(Token::class);
+    }
+    public function albumsViaAccess() {
+        return $this->belongsToMany(Album::class, AccessRight::class)
+            ->using(AccessRight::class);
+    }
+    public function images() {
+        return $this->hasManyThrough(
+            Image::class,
+            Album::class,
+            'owner_user_id',
+            'album_id'
+        );
     }
 }

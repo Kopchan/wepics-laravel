@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Http\Requests\AccessRightRequest;
 use App\Models\AccessRight;
 use App\Models\Album;
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 
 class AccessController extends Controller
@@ -57,13 +58,20 @@ class AccessController extends Controller
         return response(null, 204);
     }
 
-    public function delete(AccessRightRequest $request, $hash)
+    public function delete(AccessRightRequest $request, $hash, $user_id = null)
     {
         $album = Album::getByHash($hash);
 
+        $user = $user_id
+            ? User::find($user_id)
+            : $request->user();
+
+        if ($user->id === $album->user_id)
+            throw new ApiException(409, 'You are owner');
+
         $right = AccessRight
             ::where('album_id', $album->id)
-            ->where('user_id', $request->user_id)
+            ->where('user_id', $user->id)
             ->first();
 
         if (!$right)

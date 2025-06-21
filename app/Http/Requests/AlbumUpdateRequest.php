@@ -11,24 +11,9 @@ class AlbumUpdateRequest extends ApiRequest
     public function rules(): array
     {
         $album = Album::where('hash', $this->route('album_hash'))->first();
-
-        return [
+        $rules = [
             'displayName' => ['nullable', 'string', 'min:1', 'max:255'],
-            'pathName' => [
-                'nullable',
-                'string',
-                'min:1',
-                'max:127',
-                'not_regex:/\\/?%*:|"<>/'
-            ],
-            'urlName' => [
-                'nullable',
-                'string',
-                'min:1',
-                'regex:/^[A-Za-z0-9-]+$/',
-                Rule::unique(Album::class, 'alias')->ignore($album?->id),
-            ],
-            'ageRatingId'   => [
+            'ageRatingId' => [
                 'nullable',
                 'integer',
                 Rule::exists(AgeRating::class, 'id')
@@ -37,5 +22,23 @@ class AlbumUpdateRequest extends ApiRequest
             'viewSettings'  => ['nullable', 'string'],
             'guestAllow'    => ['nullable', 'boolean'],
         ];
+        $user = request()->user();
+        if ($user->is_admin) {
+            $rules['urlName'] = [
+                'nullable',
+                'string',
+                'min:1',
+                'regex:/^[A-Za-z0-9-]+$/',
+                Rule::unique(Album::class, 'alias')->ignore($album?->id),
+            ];
+            $rules['pathName'] = [
+                'nullable',
+                'string',
+                'min:1',
+                'max:127',
+                'not_regex:/^(?!\.{2}).*[\\/?%*:|"<>]/'
+            ];
+        }
+        return $rules;
     }
 }
