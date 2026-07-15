@@ -439,13 +439,14 @@ class AlbumController extends Controller
         $parentAlbum = Album::getByHash($hash);
         $newFolderName = $request->name;
 
-        $path = "images$parentAlbum->path$newFolderName";
-        if (Storage::exists($path))
+        $path = "$parentAlbum->path$newFolderName/";
+        $localPath = "images$path";
+        if (Storage::exists($localPath))
             throw new ApiException(409, 'Album with this internal name already exist');
 
         $name = $request->customName ?? basename($path);
 
-        Storage::createDirectory($path);
+        Storage::createDirectory($localPath);
         $newAlbum = Album::create([
             'name' => $name,
             'path' => $path,

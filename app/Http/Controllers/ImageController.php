@@ -179,7 +179,7 @@ class ImageController extends Controller
         $maxStorageSize = $user->quotaTotal();
 
         // Путь альбома для сохранения
-        $pathToSave = "users/$user->id/$album->path";
+        $pathToSave = "images$album->path";
 
         // Разрешённые расширения
         $allowedImageExtensions = config('setups.allowed_image_extensions');
