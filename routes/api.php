@@ -25,7 +25,7 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 Route
 ::controller(SettingsController::class)
 ->group(function ($settings) {
-    $settings->get('',       ['public'])->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки
+    $settings->get('',       'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки
     $settings->get('setups', 'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки 2
 });
 Route::any('who', fn () => [
