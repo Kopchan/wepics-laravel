@@ -17,7 +17,7 @@ class TagController extends Controller
     {
         if ($request->tag) {
             $search = "%$request->tag%";
-            $tags = Tag::where('value', 'LIKE', $search)->get();
+            $tags = Tag::where('name', 'LIKE', $search)->get();
         }
         else
             $tags = Tag::all();
@@ -27,28 +27,28 @@ class TagController extends Controller
     // Создание тега
     public function create(TagRequest $request)
     {
-        Tag::create(['value' => $request->tag]);
+        Tag::create(['name' => $request->tag]);
         return response(null, 201);
     }
     // Переименование тега
     public function rename(TagRenameRequest $request)
     {
-        $tag = Tag::where('value', $request->old_value)->first();
+        $tag = Tag::where('name', $request->old_value)->first();
         if (!$tag)
             throw new ApiException(404, 'Tag not found');
 
-        $tagWithNewValue = Tag::where('value', $request->new_value)->first();
+        $tagWithNewValue = Tag::where('name', $request->new_value)->first();
         if ($tagWithNewValue)
             throw new ApiException(409, 'Tag with this value already exist');
 
-        $tag->value = $request->new_value;
+        $tag->name = $request->new_value;
         $tag->save();
         return response(null, 204);
     }
     // Удаление тега
     public function delete(TagRequest $request)
     {
-        $tag = Tag::where('value', $request->tag)->first();
+        $tag = Tag::where('name', $request->tag)->first();
         if (!$tag)
             throw new ApiException(404, 'Tag not found');
 
@@ -58,7 +58,7 @@ class TagController extends Controller
     // Выставление тега на картинку
     public function set(TagRequest $request, $albumHash, $imageHash)
     {
-        $tag = Tag::where('value', $request->tag)->first();
+        $tag = Tag::where('name', $request->tag)->first();
         if (!$tag)
             throw new ApiException(404, 'Tag not found');
 
@@ -81,7 +81,7 @@ class TagController extends Controller
     // Удаление тега с картинки
     public function unset(TagRequest $request, $albumHash, $imageHash)
     {
-        $tag = Tag::where('value', $request->tag)->first();
+        $tag = Tag::where('name', $request->tag)->first();
         if (!$tag)
             throw new ApiException(404, 'Tag not found');
 

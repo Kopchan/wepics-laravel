@@ -10,11 +10,11 @@ class Tag extends Model
     use HasFactory;
 
     // Заполняемые поля
-    protected $fillable = ['value'];
+    protected $fillable = ['name'];
 
     // Поиск по значению
     static public function findFromString($string) {
-        return Tag::where('value', $string)->first();
+        return Tag::where('name', $string)->first();
     }
 
     // Связи
