@@ -558,7 +558,7 @@ class AlbumController extends Controller
         $path = storage_path("app/og/{$hashOrAlias}.png");
 
         // Если файл уже существует и не устарел — возвращаем его
-        if (file_exists($path) && now()->diffInMinutes(Carbon::createFromTimestamp(filemtime($path))) < 60) {
+        if (file_exists($path) && now()->diffInMinutes(Carbon::createFromTimestamp(filemtime($path)), absolute: true) < 60) {
             return response()->file($path, ['Content-Type' => 'image/png']);
         }
 

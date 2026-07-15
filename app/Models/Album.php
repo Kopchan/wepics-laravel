@@ -14,7 +14,7 @@ use Kalnoy\Nestedset\NodeTrait;
 
 class Album extends Model
 {
-    use NodeTrait, HasFactory;//, HasEagerLimit;
+    use NodeTrait, HasFactory;
 
     // Поля для заполнения
     protected $fillable = [

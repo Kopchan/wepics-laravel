@@ -6,11 +6,10 @@ use App\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Tags\HasTags;
-use Staudenmeir\EloquentEagerLimit\HasEagerLimit;
 
 class Image extends Model
 {
-    use HasFactory, HasTags; //, HasEagerLimit;
+    use HasFactory, HasTags;
 
     // Заполняемые поля
     protected $fillable = [
