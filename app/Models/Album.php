@@ -111,7 +111,7 @@ class Album extends Model
      * @return Album найденная модель альбома с выполненным modifyQuery
      * @throws ApiException 404 не найденная модель
      */
-    static public function getByHashOrAlias(string $hashOrAlias, Closure $modifyQuery = null): Album
+    static public function getByHashOrAlias(string $hashOrAlias, ?Closure $modifyQuery = null): Album
     {
         $user = request()->user();
         $query = Album::query();
@@ -160,7 +160,7 @@ class Album extends Model
 
     // Проверка на доступ к статичным файлам альбома
     const SIGN_CACHE_TTL = 3600;
-    static public function buildSignCacheKey(string $albumHash, int $userId = null): string {
+    static public function buildSignCacheKey(string $albumHash, ?int $userId = null): string {
         return "signAccess:to=$albumHash;for=$userId";
     }
     public function getSign(User $user) {
@@ -214,10 +214,10 @@ class Album extends Model
 
     // Проверки на доступ пользователя к альбому
     const ACCESS_CACHE_TTL = 604800;
-    static public function buildAccessCacheKey(string $albumHash, int $userId = null): string {
+    static public function buildAccessCacheKey(string $albumHash, ?int $userId = null): string {
         return "access:to=$albumHash;for=$userId";
     }
-    public function getAccessLevelCached(User $user = null): AccessLevel
+    public function getAccessLevelCached(?User $user = null): AccessLevel
     {
         $cacheKey = static::buildAccessCacheKey($this->hash, $user?->id);
         $result = null;
@@ -249,7 +249,7 @@ class Album extends Model
 
         return $result;
     }
-    public static function getAccessLevelBatchById(int $albumId, int $userId = null): AccessLevel
+    public static function getAccessLevelBatchById(int $albumId, ?int $userId = null): AccessLevel
     {
         $result = AccessLevel::None;
         $ancestors = Album::reversed()->ancestorsAndSelf($albumId);
@@ -299,7 +299,7 @@ class Album extends Model
 
         return $result;
     }
-    public static function getAccessLevelCachedByHash(string $albumHash, User $user = null): AccessLevel
+    public static function getAccessLevelCachedByHash(string $albumHash, ?User $user = null): AccessLevel
     {
 
         $cacheKey = static::buildAccessCacheKey($albumHash, $user?->id);
@@ -310,6 +310,9 @@ class Album extends Model
 
             if ($album->guest_allow)
                 $result = AccessLevel::AsGuest;
+
+            if ($user && $album->owner_user_id === $user->id)
+                $result = AccessLevel::AsOwner;
 
             if (!$result)
                 $result = Album::getAccessLevelBatchById($album->id, $user?->id);

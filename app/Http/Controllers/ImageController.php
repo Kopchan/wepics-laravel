@@ -624,7 +624,7 @@ class ImageController extends Controller
     public function info($albumHash, $imageHash)
     {
         $image = Image::getByHash($albumHash, $imageHash);
-        if (!$image->album->getAccessLevelCachedh(request()->user()))
+        if ($image->album->getAccessLevelCached(request()->user()) == AccessLevel::None)
             throw new ApiException(403, 'Forbidden for you');
 
         return response(ImageResource::make($image));
@@ -665,7 +665,7 @@ class ImageController extends Controller
         ) {
             // Проверка доступа по токену в заголовках
             $image = Image::getByHash($albumHash, $imageHash);
-            if (!$image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
+            if ($image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
                 throw new ApiException(403, 'Forbidden for you');
         }
         $image = $image ?? Image::getByHash($albumHash, $imageHash);
