@@ -13,6 +13,7 @@ class SpaceInfo extends CacheableBase
     public readonly int $free;
     public readonly int $used;
     public readonly int $usedPercent;
+    public readonly bool $isUploadDisabled;
     public readonly DateTime $gotAt;
 
     public function __construct($total, $free)
