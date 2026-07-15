@@ -101,12 +101,23 @@ return [
     |--------------------------------------------------------------------------
     |
     | App\Models\User is cached directly by User::getByToken() for the
-    | custom token-auth flow, so it must be explicitly allow-listed here.
+    | custom token-auth flow. App\Cacheables\SpaceInfo (and any future
+    | CacheableBase subclass) is cached directly by CacheableBase::get()
+    | and getCached(). PHP's allowed_classes check applies to every
+    | nested object too, so SpaceInfo's readonly $gotAt property (set via
+    | now(), which resolves to Illuminate\Support\Carbon) must be
+    | allow-listed as well, or unserialize() throws on it.
     |
     */
 
     'serializable_classes' => [
         App\Models\User::class,
+        App\Models\AgeRating::class,
+        App\Models\Reaction::class,
+        App\Cacheables\SpaceInfo::class,
+        App\Enums\AccessLevel::class,
+        Illuminate\Support\Carbon::class,
+        Illuminate\Database\Eloquent\Collection::class,
     ],
 
     /*
