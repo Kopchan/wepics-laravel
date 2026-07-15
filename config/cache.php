@@ -97,6 +97,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Serializable Classes
+    |--------------------------------------------------------------------------
+    |
+    | App\Models\User is cached directly by User::getByToken() for the
+    | custom token-auth flow, so it must be explicitly allow-listed here.
+    |
+    */
+
+    'serializable_classes' => [
+        App\Models\User::class,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Key Prefix
     |--------------------------------------------------------------------------
     |
