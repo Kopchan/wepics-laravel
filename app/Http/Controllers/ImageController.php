@@ -23,7 +23,8 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Intervention\Image\Laravel\Facades\Image as Intervention;
+use Intervention\Image\Encoders\WebpEncoder;
+use Intervention\Image\ImageManager;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
@@ -590,7 +591,14 @@ class ImageController extends Controller
             }
             else {
                 // Создание превью как webp картинку
-                $thumb = Intervention::read($imagePath);
+                $imageManager = new ImageManager(
+                    driver: config('image.driver'),
+                    autoOrientation: config('image.options.autoOrientation', true),
+                    decodeAnimation: config('image.options.decodeAnimation', true),
+                    backgroundColor: config('image.options.backgroundColor', 'ffffff'),
+                    strip: config('image.options.strip', false),
+                );
+                $thumb = $imageManager->decode($imagePath);
 
                 switch ($orientation) {
                     case 'w':
@@ -607,7 +615,7 @@ class ImageController extends Controller
                 if (!Storage::exists($dirname))
                     Storage::makeDirectory($dirname);
 
-                $thumb->toWebp(90)->save(Storage::path($thumbPath));
+                $thumb->encode(new WebpEncoder(quality: 90))->save(Storage::path($thumbPath));
                 unset($thumb);
             }
         }
