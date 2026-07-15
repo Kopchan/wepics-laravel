@@ -13,7 +13,7 @@ class LogRequest
     public function handle(Request $request, Closure $next)
     {
         if (!config('logging.dbQueries', false))
-            $next($request);
+            return $next($request);
 
         try {
             $method = strtoupper($request->getMethod());
