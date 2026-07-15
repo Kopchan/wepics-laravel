@@ -47,6 +47,9 @@ class UserController extends Controller
     public function showAll() {
         return response(User::all());
     }
+    public function showSelf(Request $request) {
+        return response($request->user());
+    }
     public function show(int $id) {
         $user = User::find($id);
 
