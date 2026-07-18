@@ -27,11 +27,14 @@ use Intervention\Image\Laravel\Facades\Image as Intervention;
 use Illuminate\Support\Facades\Storage;
 use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
+// TODO: Убрать куча повторений
 class ImageController extends Controller
 {
-    public static function indexingImages(Album $album)
+    public static function indexingImages(Album $album) // Legacy !!!
     {
-        // TODO: Перейти на свою индексацию через glob для быстрой и одновременной индексации картинок и папок (мб всех файлов)
+        // TODO: Переписать на индексацию из команды app:index
+
+        // Перейти на свою индексацию через glob для быстрой и одновременной индексации картинок и папок (мб всех файлов)
         // Путь к альбому
         $path = Storage::path("images$album->path");
 

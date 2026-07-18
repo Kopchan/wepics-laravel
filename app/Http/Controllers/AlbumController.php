@@ -23,11 +23,14 @@ use Illuminate\Support\Str;
 use Nette\NotImplementedException;
 use Spatie\Browsershot\Browsershot;
 
+// TODO: Убрать куча повторений
 class AlbumController extends Controller
 {
-    public static function indexingAlbumChildren(Album $album): array
+    public static function indexingAlbumChildren(Album $album): array // Legacy !!!
     {
-        // TODO: Перейти на свою индексацию через glob для быстрой и одновременной индексации картинок и папок (мб всех файлов)
+        // TODO: Переписать на индексацию из команды app:index
+
+        // Перейти на свою индексацию через glob для быстрой и одновременной индексации картинок и папок (мб всех файлов)
         // Получение пути к альбому и его папок
         $localPath = Storage::path("images$album->path");
       //$folders = array_filter(glob("$localPath*", GLOB_MARK), fn ($path) => in_array($path[-1], ['/', '\\']));
@@ -58,7 +61,7 @@ class AlbumController extends Controller
             $children[] = $childAlbum;
         }
         // Удаление оставшихся альбомов в БД
-        //Album::destroy(array_column($childrenInDB, 'id')); // FIXME: опасное удаление, надо спрашивать админа "куда делся тот-та альбом?"
+        //Album::destroy(array_column($childrenInDB, 'id')); // опасное удаление, надо спрашивать админа "куда делся тот-та альбом?"
 
         $album->last_indexation = now();
         $album->save();
@@ -204,6 +207,206 @@ class AlbumController extends Controller
             }
             $response['parentsChain'] = $parentsChainRefined;
         }
+        return response($response);
+    }
+
+    public function ownAndAccessible(AlbumRequest $request)
+    {
+        // Получение пользователя
+        $user = $request->user();
+
+        // Сортировка контента
+        $contentSortType = $request->sort ?? SortType::values()[0];
+
+        $seed = $request->seed ?? (
+        $contentSortType === 'random'
+            ? mt_rand(100_000, 999_999)
+            : null
+        );
+
+        $contentSortTypeRaw = match ($contentSortType) {
+            'random'     => 'RAND('.DB::getPdo()->quote($seed).')',
+            'reacts'     => "reactions_count",
+            'ratio'      => 'width / height',
+            'square'     => 'ABS(GREATEST(width, height) / LEAST(width, height) - 1)',
+            'frames'     => 'frames_count',
+            'duration'   => 'duration_ms',
+            'framerate'  => 'avg_frame_rate_num / avg_frame_rate_den',
+            'bitrate'    => 'size * 8 / duration_ms * 1000',
+            default      => $contentSortType,
+        };
+        $contentSortTypeRawAdd = match ($contentSortType) {
+            'duration',
+            'bitrate'    => 'duration_ms'       ." IS NULL, $contentSortTypeRaw",
+            'frames'     => 'frames_count'      ." IS NULL, $contentSortTypeRaw",
+            'framerate'  => 'avg_frame_rate_den'." IS NULL, $contentSortTypeRaw",
+            default      =>                                 $contentSortTypeRaw,
+        };
+        $contentSortDirection = $request->has('reverse') ? 'DESC' : 'ASC';
+        $contentNaturalSort   = "natural_sort_key";
+        $contentSort = match ($contentSortType) {
+            'name'  =>                                               "$contentNaturalSort $contentSortDirection",
+            default => "$contentSortTypeRawAdd $contentSortDirection, $contentNaturalSort",
+        };
+
+        // Сортировка дочерних альбомов
+        $albumsSortType = $request->sortAlbums ?? SortAlbumType::values()[0];
+
+        $seed = $seed ?? (
+        $albumsSortType === 'random'
+            ? mt_rand(100_000, 999_999)
+            : null
+        );
+
+        $albumsSortTypeRaw = match ($albumsSortType) {
+            'random'   => 'RAND('.DB::getPdo()->quote($seed).')',
+            'content'  => 'content_sort_field',
+            'medias'   => 'medias_count',
+            'images'   => 'images_count',
+            'videos'   => 'videos_count',
+            'audios'   => 'audios_count',
+            'albums'   => 'albums_count',
+            'indexed'  => 'last_indexation',
+            'created'  => 'created_at',
+            default    => $albumsSortType,
+        };
+        $albumsSortDirection = $request->has('reverseAlbums') ? 'DESC' : 'ASC';
+        $albumNaturalSort    = "natural_sort_key";
+        $albumSort = match ($albumsSortType) {
+            'name'  =>                                          "$albumNaturalSort $albumsSortDirection",
+            default => "$albumsSortTypeRaw $albumsSortDirection, $albumNaturalSort",
+        };
+        $albumOrderLevel = $request->has('disrespect') ? '' : 'order_level DESC, ';
+        $albumSort = $albumOrderLevel.$albumSort;
+
+        // Кол-во загружаемых картинок ко всем альбомам
+        if ($request->has('images'))
+            $imagesLimitJoin = intval($request->images) ?? 0;
+        else
+            $imagesLimitJoin = 4;
+
+        $mediaTypes = [];
+        if ($request->types) {
+            foreach ($request->types as $type) {
+                $mediaTypes[] = match ($type) {
+                    MediaType::Image->value => 'image',
+                    MediaType::Video->value => 'video',
+                    MediaType::Audio->value => 'audio',
+                    MediaType::ImageAnimated->value => 'imageAnimated',
+                };
+            }
+        }
+
+        // Подзапрос для content_sort_field
+        $contentSortFieldSubquery = Image
+            ::whereColumn('album_id', 'albums.id')
+            ->orderByRaw("content_sort_field $contentSortDirection")
+            ->limit(1);
+
+        if ($contentSortType === 'reacts') {
+            $contentSortFieldSubquery
+                //->withCount('reactions as content_sort_field')
+                ->selectRaw(DB::raw('('
+                    .  'select count(*)'
+                    .  'from `reactions`'
+                    .  'inner join `reaction_images` on `reactions`.`id` = `reaction_images`.`reaction_id`'
+                    .  'where `images`.`id` = `reaction_images`.`image_id`'
+                    .') as `content_sort_field`'));
+        }
+        else {
+            $contentSortFieldSubquery
+                ->selectRaw("$contentSortTypeRaw as content_sort_field");
+        }
+
+        // Нужно ли подгружать дочерние альбомы?
+        $childrenIsRequired = !$request->has('simple');
+
+        // Вычисление того что подгрузить к альбому
+        $withCount = [
+            'images as medias_count',
+            'images as images_count' => fn($q) => $q->where  ('type',  'image'),
+            'images as videos_count' => fn($q) => $q->whereIn('type', ['video', 'imageAnimated']),
+            'images as audios_count' => fn($q) => $q->where  ('type',  'audio'),
+            'childAlbums as albums_count',
+        ];
+        $withLoad = [
+            'ancestors',
+        ];
+        if ($childrenIsRequired)
+            $withLoad['childAlbums'] = fn($q) => $q
+                ->withCount($withCount)
+                ->withSum('images as size'    , 'size')
+                ->withSum('images as duration', 'duration_ms')
+                ->addSelect($albumsSortType === 'content' ? [
+                    'content_sort_field' => $contentSortFieldSubquery
+                ] : [])
+                ->orderByRaw($albumSort);
+
+        if ($imagesLimitJoin) {
+            $withLoad['images'] = function ($query) use ($contentSortType, $contentSort, $imagesLimitJoin, $mediaTypes) {
+                $query
+                    ->orderByRaw($contentSort)
+                    ->limit($imagesLimitJoin);
+
+                if ($contentSortType === 'reacts')
+                    $query->withCount('reactions');
+
+                if (count($mediaTypes))
+                    $query->whereIn('type', $mediaTypes);
+
+                return $query;
+            };
+
+            // медленнее, чем запрос картинок на каждом альбоме
+            //$withLoad['childAlbums.images'] = fn($q) => $q->orderByRaw($contentSort)->limit($imagesLimitJoin);
+        }
+
+        // Получение личных альбомов пользователя
+        $ownAlbums = Album
+            ::where('owner_user_id', $user->id)
+            ->withCount($withCount)
+            ->withSum('images as size'    , 'size')
+            ->withSum('images as duration', 'duration_ms')
+            ->with($withLoad)
+            ->get();
+
+        // Получение доступные пользователю чужие альбомы
+        $accessibleAlbums = $user->albumsViaAccess()
+            ->where('owner_user_id', $user->id)
+            ->withCount($withCount)
+            ->withSum('images as size'    , 'size')
+            ->withSum('images as duration', 'duration_ms')
+            ->with($withLoad)
+            ->get();
+
+        // Проход по дочерним альбомам и запись сигнатур-токенов для получения картинок
+        foreach ($ownAlbums as $child) {
+            $hasImages = $child->medias_count > 0;
+            if ($hasImages && $imagesLimitJoin) {
+                $query = Image::where('album_id', $child->id)->limit($imagesLimitJoin)->orderByRaw($contentSort);
+                if ($contentSortType === 'reacts') $query->withCount('reactions');
+                if (count($mediaTypes))            $query->whereIn('type', $mediaTypes);
+                $child['imagesLoaded'] = $query->get();
+            }
+        }
+        foreach ($accessibleAlbums as $child) {
+            $hasImages = $child->medias_count > 0;
+            if ($hasImages && $imagesLimitJoin) {
+                $query = Image::where('album_id', $child->id)->limit($imagesLimitJoin)->orderByRaw($contentSort);
+                if ($contentSortType === 'reacts') $query->withCount('reactions');
+                if (count($mediaTypes))            $query->whereIn('type', $mediaTypes);
+                $child['imagesLoaded'] = $query->get();
+            }
+        }
+
+        $response = [
+            'own'        => AlbumResource::collection($ownAlbums),
+            'accessible' => AlbumResource::collection($accessibleAlbums),
+        ];
+
+        if ($seed)
+            $response['seed'] = $seed;
+
         return response($response);
     }
 

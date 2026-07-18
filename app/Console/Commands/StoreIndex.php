@@ -16,7 +16,7 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
 class StoreIndex extends Command
 {
-    protected $signature = 'app:index {--s|start-from=} {--d|auto-destroy}';
+    protected $signature = 'app:index {--s|start-from=} {--d|auto-destroy} {--l|layers} {--r|recursive}';
 
     protected $description = 'Index root album for new albums/images and remove if not found';
 
@@ -42,14 +42,33 @@ class StoreIndex extends Command
         Album::fixTree();
         $this::newLine();
 
+        // Сортировки
+        $sortOptions = [
+            'layers' => 'By layers (shallow to deep)',
+            'recursive' => 'Recursively (alphabetically, including nested)'
+        ];
+
+        // Проверка параметров сортировки
+        $sortMode = $this->hasOption('layers') ? 'layers' :
+            ($this->hasOption('recursive') ? 'recursive' :
+                $this->choice('How would you like to iterate through the albums?', array_values($sortOptions), 0)
+            );
+
         // Получение всех альбомов
         $this->line('Get all albums...');
-        $albums = Album
-            ::query()
-            ->orderByRaw('LENGTH(path) - LENGTH(REPLACE(path, "/", ""))') // Сортировка по количеству слешей
-            ->orderByRaw('LENGTH(path)')                                  // Сортировка по длине пути
-            ->orderBy('path')                                          // Сортировка по алфавиту
-            ->get();
+        $query = Album::query()
+            ->whereNull('owner_user_id');
+
+        if ($sortMode === 'layers') {
+            $query->orderByRaw('LENGTH(path) - LENGTH(REPLACE(path, "/", ""))') // По глубине
+            ->orderByRaw('LENGTH(path)')                                       // По длине
+            ->orderBy('path');                                                // По алфавиту
+        } else {
+            // Рекурсивно — просто по алфавиту
+            $query->orderBy('path');
+        }
+
+        $albums = $query->get();
         $this::newLine();
 
         // Разрешённые расширения
@@ -76,6 +95,8 @@ class StoreIndex extends Command
             $this->warn("Album not found with \"$startFrom\"");
             return;
         }
+
+        // =========================== Папки -> Альбомы ===========================
 
         // Проход по альбомам
         while ($albums->count() > $currentAlbumKey) {
@@ -127,6 +148,7 @@ class StoreIndex extends Command
                 $key = $albumChildren->search(fn ($a) => $a['path'] === $childPath);
                 if ($key !== false) {
                     $albumChild = $albumChildren[$key];
+                    // Вывод известной [ ] записи в консоль
                     $this->line(
                         "  <fg=gray;href=". url("../album/$albumChild->hash") .">$albumChild->hash</> "
                         ."<fg=gray;href=file:///". Storage::path("images$childPath") .">$basename/</> "
@@ -146,6 +168,7 @@ class StoreIndex extends Command
                     //$childAlbum->parent_album_id = $currentAlbum->id;
                     $childAlbum->save();
                     $newAlbums[] = $childAlbum;
+                    // Вывод добавленной [+] записи в консоль
                     $this->info('<fg=green>+ '
                         ."<fg=green;href=". url("../album/$hash") .">$hash</> "
                         ."<fg=green;href=file:///". Storage::path("images$childPath") .">$basename/</></> "
@@ -154,6 +177,7 @@ class StoreIndex extends Command
             }
             // Отображение всех не найденных альбомов
             foreach ($albumChildren as $key => $notFoundedAlbum) {
+                // Вывод не найденной [-] записи в консоль
                 $this->line('<fg=red>- '
                     ."<fg=red;href=". url("../album/$notFoundedAlbum->hash") .">$notFoundedAlbum->hash</> "
                     ."<fg=red;href=file:///". Storage::path('images'). $notFoundedAlbum->path .'>'.basename($notFoundedAlbum->path).'/</></> '
@@ -175,7 +199,7 @@ class StoreIndex extends Command
                 Album::destroy($albumChildren->pluck('id')->toArray());
             }
 
-
+            // =========================== Файлы -> Медиа ===========================
 
             // Получение файлов альбома
             $start = now();
@@ -232,6 +256,7 @@ class StoreIndex extends Command
                         $existImage = $images[$key];
                         $isDuplica = array_key_exists('origName', $existImage);
                         // FIXME: если есть дубликаты и один из них удалили (а в базе есть), то в консоли выводится не связные картинки
+                        // Вывод известной [ /↩] записи в консоль
                         $this->line("<fg=gray>\r"
                             .($isDuplica ? '↩ ' : '  ')
                             . $counter
@@ -263,6 +288,7 @@ class StoreIndex extends Command
                     if (in_array($extension, $allowedAudioExtensions))
                         $type = 'audio';
                     else {
+                        // Вывод пропущенный [×] файл в консоль
                         $this->line("<fg=blue>\r× "
                             . $counter
                             ." <fg=blue;href=file:///$file>$name</>"
@@ -273,6 +299,7 @@ class StoreIndex extends Command
                     }
 
                     // Отсекаем не совпадающие c определителем MIME по заголовкам файла
+                    // TODO: Надо сохранять если формат всё же поддерживается, хоть и под другим расширением (mp4v в .mp4, webp в .jpg)
                     $guessExtension = File::guessExtension($file);
                     if ($extension !== $guessExtension) {
                         $this->line("<fg=red>\r× "
@@ -300,6 +327,8 @@ class StoreIndex extends Command
                             Image
                                 ::where('id', $images[$key]['id'])
                                 ->update(['name' => $name]);
+
+                            // Вывод переименованную [→] запись в консоль
                             $this->line("<fg=yellow>\r→ "
                                 . $counter
                                 .' <fg=yellow;href='. url("api/albums/$currentAlbum->hash/images/$hash/orig") .">$hash</>"
@@ -325,6 +354,7 @@ class StoreIndex extends Command
                                 'origName' => $images[$key]['name']
                             ]);
 
+                            // Вывод добавленный дубликат [↩] запись в консоль
                             $this->line("<fg=yellow>\r↩ "
                                 . $counter
                                 .' <fg=yellow;href='. url("api/albums/$currentAlbum->hash/images/$hash/orig") .">$hash</>"
@@ -339,8 +369,9 @@ class StoreIndex extends Command
 
                     // Получение размеров картинки, если нет размеров (не получили) — пропуск
                     if ($type === 'image') {
-                        $sizes = getimagesize($file); // TODO: на перевёрнутых JPG даёт те же размеры
+                        $sizes = getimagesize($file); // FIXME: на перевёрнутых JPG даёт те же размеры
                         if (!$sizes) {
+                            // Вывод пропущенный [×] файл в консоль
                             $this->line("<fg=red>\r× "
                                 . $counter
                                 ." <fg=blue;href=file:///$file>$name</>"
@@ -351,19 +382,24 @@ class StoreIndex extends Command
                         }
                     }
 
-                    // Получение информации об основном потоку
+                    // Получение информации об основном потоке (картинки тоже). Для аудио выбираем аудиопоток
                     if ($type !== 'audio')
                         $probeInfo = $probe->streams($file)->videos()->first();
                     else
                         $probeInfo = $probe->streams($file)->audios()->first();
 
-                    $steamContentFields = [];
+                    // Информации о потоке. Идёт в основную БД запись
+                    $streamContentFields = [];
 
+                    // Если в картинке есть длительность, то значит это анимированная картинка
                     if ($type === 'image' && ($probeInfo?->get('duration_ts') ?? 0) > 1)
                         $type = 'imageAnimated';
 
+                    // Сбор информации о потоке. Картинка пропускается
                     if ($type !== 'image') {
+                        // Отбрасываем если длительность не можем получить
                         if (!($probeInfo?->get('duration_ts'))) {
+                            // Вывод пропущенной [×] файл в консоль
                             $this->line("<fg=red>\r× "
                                 . $counter
                                 ." <fg=blue;href=file:///$file>$name</>"
@@ -372,29 +408,39 @@ class StoreIndex extends Command
                             );
                             continue;
                         }
-                        $steamContentFields['codec_name'] = $probeInfo->get('codec_name');
 
+                        // TODO: Всё же надо хранить отдельно аудио и видео кодек для видеоконтейнеров
+                        // TODO: Ещё лучше хранить отдельно записи об каждом потоке?
+                        // Основной кодек
+                        $streamContentFields['codec_name'] = $probeInfo->get('codec_name');
+
+                        // FFMpeg возвращает в длительность секунды. Переводим в миллисекунды
                         $number = $probeInfo->get('duration');
                         if (!str_contains($number, '.')) $number .= '.000';
                         [$intPart, $decimalPart] = explode('.', $number, 2);
                         $decimalPart = substr($decimalPart . '000', 0, 3);
-                        $steamContentFields['duration_ms'] = (int)($intPart . $decimalPart);
+                        $streamContentFields['duration_ms'] = (int)($intPart . $decimalPart);
 
                         if ($type !== 'audio') {
+                            // Получение размеров видео/анимации
                             $sizes = [
                                 $probeInfo->get('width'),
                                 $probeInfo->get('height')
                             ];
 
+                            // Частота кадров как [0] - числитель, [1] - знаменатель
                             $framerate = array_map('intval',
                                 explode('/', $probeInfo->get('avg_frame_rate'))
                             );
-                            $steamContentFields['avg_frame_rate_num'] = $framerate[0];
-                            $steamContentFields['avg_frame_rate_den'] = $framerate[1];
-                            $steamContentFields['frame_count'] = (int)$probeInfo->get('nb_frames');
+                            $streamContentFields['avg_frame_rate_num'] = $framerate[0];
+                            $streamContentFields['avg_frame_rate_den'] = $framerate[1];
+
+                            // Общее число кадров
+                            $streamContentFields['frame_count'] = (int)$probeInfo->get('nb_frames');
                         }
                         else {
-                            $sizes = [500, 500]; // TODO: Читать из обложки аудио
+                            // Получение размеров превью аудио
+                            $sizes = [500, 500]; // TODO: Тупая заглушка, надо читать из обложки аудио
                         }
                     }
 
@@ -410,8 +456,9 @@ class StoreIndex extends Command
                         'size' => File::size($file),
                         'width'  => $sizes[0],
                         'height' => $sizes[1],
-                        ...$steamContentFields,
+                        ...$streamContentFields,
                     ]);
+                    // Вывод добавленной [+] запись в консоль
                     $this->line("<fg=green>\r+ "
                         . $counter
                         ." <fg=green;href="
@@ -426,6 +473,7 @@ class StoreIndex extends Command
                     $imagesHashes[] = $hash;
                 }
                 catch (\Exception $ex) {
+                    // Вывод не удавшийся [/] файл в консоль
                     $this->error("\r/ "
                         . $counter
                         ." <bg=red;fg=white;href=file:///$file>$name</> "
@@ -445,6 +493,7 @@ class StoreIndex extends Command
                     $notFoundedOrigs[] = $notFoundedImage;
 
                 try {
+                    // Вывод не найденной [-] записи в консоль
                     $this->line("<fg=red>\r- "
                         .'['.static::counter(0, $filesCount).'] '
                         .($isDuplica ? '' : '<fg=gray;href='
