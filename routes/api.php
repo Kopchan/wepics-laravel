@@ -9,7 +9,6 @@ use App\Http\Controllers\ImageController;
 use App\Http\Controllers\AccessController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\ReactionController;
-use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,13 +24,15 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 Route
 ::controller(SettingsController::class)
 ->group(function ($settings) {
-    $settings->get('',       'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки
-    $settings->get('setups', 'public')->middleware('cache.headers:public;max_age=2628000;etag'); // Публичные предустановки 2
+    $settings->get('',       'index' )->middleware('cache.headers:private;max_age=2628000;etag'); // Автоматическая информация об сервере
+    $settings->get('who',    'who'   )->middleware('cache.headers:public;max_age=2628000;etag');  // Публичная информация об сервисе
+    $settings->get('setups', 'setups')->middleware('cache.headers:public;max_age=2628000;etag');  // Публичные предустановки
+    $settings->middleware('token.auth:admin')->group(function ($administration) {
+        $administration->get('space', 'space');                                                   // Информация об серверном хранилище
+        $administration->get('spacePrint', 'printSpaceDevices');
+        $administration->get('spacetest', function () { dd(\App\Cacheables\SpaceInfo::function(null)); });
+    });
 });
-Route::any('who', fn () => [
-    'service' => 'Wepics',
-    'appname' => config('app.name'),
-]);
 Route
 ::controller(UserController::class)
 ->prefix('users')
@@ -64,7 +65,7 @@ Route
     $album->get('info', 'get');
     $album->get('og.png', 'ogImage')->name('get.album.ogLegacy');
     $album->get('og', 'ogImage')->name('get.album.og');
-    $album->get('ogView', 'ogView');
+    $album->get('ogView', 'ogView')->name('get.album.ogView');
     $album->post('invite',
         [InvitationController::class, 'store']) // Генерировать код приглашения на СВОЙ альбом
         ->middleware('token.auth:owner');

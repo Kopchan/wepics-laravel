@@ -172,7 +172,7 @@ class ImageController extends Controller
 
         // Получаем сколько сейчас занято на диске, если достигли предела - выводим ошибку
         $spaceInfo = SpaceInfo::getCached();
-        if ($spaceInfo->isUploadDisabled)
+        if ($spaceInfo->isUploadDisabled || !config('upload_enable'))
             throw new ApiException(400, 'Server in read-only mode');
 
         // Получаем сколько сейчас весят пользовательское медиа и какой лимит по загрузкам
@@ -543,7 +543,7 @@ class ImageController extends Controller
         if (!Storage::exists($thumbPath)) {
             // Проверка запрашиваемого размера и редирект, если не прошло
             $askedSize = $size;
-            $allowedSizes = [144, 240, 360, 480, 720, 1080];
+            $allowedSizes = config('setups.allowed_preview_sizes');
             $allowSize = false;
             foreach ($allowedSizes as $allowedSize) {
                 if ($size <= $allowedSize) {
@@ -601,15 +601,9 @@ class ImageController extends Controller
                 $thumb = $imageManager->decode($imagePath);
 
                 switch ($orientation) {
-                    case 'w':
-                        $thumb->scaleDown(width: $size);
-                        break;
-                    case 'h':
-                        $thumb->scaleDown(height: $size);
-                        break;
-                    default:
-                        $thumb->coverDown($size, $size);
-                        break;
+                    case 'w': $thumb->scaleDown(width:  $size); break;
+                    case 'h': $thumb->scaleDown(height: $size); break;
+                    default:  $thumb->coverDown($size,  $size); break;
                 }
 
                 if (!Storage::exists($dirname))
@@ -626,7 +620,7 @@ class ImageController extends Controller
             ], 202);
         }
 
-        return response()->file(Storage::path($thumbPath), ['Cache-Control' => ['max-age=86400', 'private']]);
+        return response()->file(Storage::path($thumbPath), ['Cache-Control' => ['max-age=86400', 'private', 'immutable']]);
     }
 
     public function info($albumHash, $imageHash)
@@ -653,14 +647,19 @@ class ImageController extends Controller
         }
         $image ??= Image::getByHashOrAlias($albumHash, $imageHash);
         $path = Storage::path('images'. $image->album->path . $image->name);
-        //dd(base64url_encode(hash_file('xxh3', $path, true)));
         //ob_end_clean();
         //return response()->file($path);
-        //dd($path);
-        return response('ok', 200)->withHeaders([
-            'X-Sendfile' => $path,
-            'Content-Type' => File::mimeType($path),
-        ]);
+
+        $fileInfo = pathinfo($image->name);
+        $downloadName = "wpx {$fileInfo['filename']} [{$imageHash}].{$fileInfo['extension']}";
+
+        //dd(config('app.trustXSendfile'), request(), response()->download($path, $downloadName, [
+        //    'Cache-Control' => ['public', 'max-age=3600', 'immutable'],
+        //], 'inline')->prepare(request()));
+
+        return response()->download($path, $downloadName, [
+            'Cache-Control' => ['public', 'max-age=3600', 'immutable'],
+        ], 'inline');
     }
 
     public function download($albumHash, $imageHash)
@@ -672,17 +671,23 @@ class ImageController extends Controller
             !($sign && Album::checkSignStatic($albumHash, $sign))
         ) {
             // Проверка доступа по токену в заголовках
-            $image = Image::getByHash($albumHash, $imageHash);
+            $image = Image::getByHashOrAlias($albumHash, $imageHash);
             if ($image->album->getAccessLevelCached(request()->user()) === AccessLevel::None)
                 throw new ApiException(403, 'Forbidden for you');
         }
-        $image = $image ?? Image::getByHash($albumHash, $imageHash);
+        $image = $image ?? Image::getByHashOrAlias($albumHash, $imageHash);
         $path = Storage::path('images'. $image->album->path . $image->name);
-        ob_end_clean();
-        return response()->download($path, $image->name);
+
+        $fileInfo = pathinfo($image->name);
+        $downloadName = "wpx {$fileInfo['filename']} [{$imageHash}].{$fileInfo['extension']}";
+
+        //ob_end_clean();
+        return response()->download($path, $downloadName, [
+            'Cache-Control' => ['public', 'max-age=3600', 'immutable'],
+        ]);
     }
 
-    public function rename(AlbumCreateRequest $request, $albumHash, $imageHash)
+    public function rename(AlbumCreateRequest $request, $albumHash, $imageHash) // TODO: обновить на update
     {
 //        $image = Image::getByHash($albumHash, $imageHash);
 //        $imageExt = pathinfo($image->name, PATHINFO_EXTENSION);
