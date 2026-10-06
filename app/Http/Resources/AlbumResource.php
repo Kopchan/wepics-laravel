@@ -36,7 +36,7 @@ class AlbumResource extends JsonResource
 //          'images'      => $this->whenLoaded('images',                fn() => ImageResource::collection($this->images)),
             'images'      => $this->when(
                 $this->imagesLoaded || $this->relationLoaded('images'),
-                fn() => ImageResource::collection($this->imagesLoaded ?? $this->images)
+                fn() => ImageLinkResource::collection($this->imagesLoaded ?? $this->images)
             ),
             'ancestors'   => $this->whenLoaded('ancestors',   fn() => AlbumResource::collection($this->ancestors)),
             'children'    => $this->whenLoaded('childAlbums', fn() => AlbumResource::collection($this->childAlbums)),

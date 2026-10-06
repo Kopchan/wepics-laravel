@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Kalnoy\Nestedset\NodeTrait;
 
@@ -86,6 +87,7 @@ class Album extends Model
                 'name' => '',
                 'hash' => 'root',
             ]);
+            Storage::makeDirectory('images' . $album->path);
         }
         else if ($hash === 'my' && $user !== null) {
             $album = $query->firstOrCreate([
@@ -95,6 +97,7 @@ class Album extends Model
                 'hash' => Str::random(25),
                 'owner_user_id' => $user->id,
             ]);
+            Storage::makeDirectory('images' . $album->path);
         }
         else {
             $album = Album::where('hash', $hash)->first();
@@ -126,6 +129,7 @@ class Album extends Model
                 'name' => '',
                 'hash' => 'root',
             ]);
+            Storage::makeDirectory('images' . $album->path);
         }
         // Если запрошен корневой альбом пользователя, то генерируем и возвращаем, если нет
         else if ($hashOrAlias === 'my' && $user !== null) {
@@ -136,6 +140,7 @@ class Album extends Model
                 'hash' => Str::random(25),
                 'owner_user_id' => $user->id,
             ]);
+            Storage::makeDirectory('images' . $album->path);
         }
         // Ищем альбом по хешу, первичному и вторичному алисасу
         else {

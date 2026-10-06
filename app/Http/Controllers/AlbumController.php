@@ -19,13 +19,15 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Nette\NotImplementedException;
 use Spatie\Browsershot\Browsershot;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AlbumController extends Controller
 {
-    public static function indexingAlbumChildren(Album $album): array
+    public static function indexingAlbumChildren(Album $album): array // Legacy !!!
     {
         // TODO: Перейти на свою индексацию через glob для быстрой и одновременной индексации картинок и папок (мб всех файлов)
         // Получение пути к альбому и его папок
@@ -64,7 +66,7 @@ class AlbumController extends Controller
         $album->save();
         return $children;
     }
-    public function reindex($hash)
+    public function reindex($hash) // Legacy !!!
     {
         // Получение пользователя
         $user = request()->user();
@@ -80,7 +82,7 @@ class AlbumController extends Controller
 
         return response(null);
     }
-    public function getLegacy(AlbumRequest $request, $hash)
+    public function getLegacy(AlbumRequest $request, $hash) // Legacy !!!
     {
         // Получение пользователя
         $user = request()->user();
@@ -317,6 +319,12 @@ class AlbumController extends Controller
 
         // Нужно ли подгружать дочерние альбомы?
         $childrenIsRequired = !$request->has('simple');
+        $grandchildsIsRequired = $request->has('grandchilds');
+
+        if ($request->has('grandchildsImages'))
+            $grandchildsImages = intval($request->grandchildsImages) ?? 0;
+        else
+            $grandchildsImages = 4;
 
         // Вычисление того что подгрузить к альбому
         $withCount = [
@@ -337,7 +345,19 @@ class AlbumController extends Controller
                 ->addSelect($albumsSortType === 'content' ? [
                     'content_sort_field' => $contentSortFieldSubquery
                 ] : [])
-                ->orderByRaw($albumSort);
+                ->orderByRaw($albumSort)
+                ->when($grandchildsIsRequired, function ($query) use ($albumSort, $grandchildsImages, $albumsSortType, $contentSortFieldSubquery) {
+                    return $query->with(['childAlbums' => fn($subQ) => $subQ
+                        ->withCount([
+                            'images as medias_count',
+                            'childAlbums as albums_count',
+                        ])
+                        ->addSelect($albumsSortType === 'content' ? [
+                            'content_sort_field' => $contentSortFieldSubquery
+                        ] : [])
+                        ->orderByRaw($albumSort)
+                    ]);
+                });
 
         if ($imagesLimitJoin) {
             $withLoad['images'] = function ($query) use ($contentSortType, $contentSort, $imagesLimitJoin, $mediaTypes) {
@@ -354,7 +374,7 @@ class AlbumController extends Controller
                 return $query;
             };
 
-            // FIXME: медленнее, чем запрос картинок на каждом альбоме
+            // Медленнее, чем запрос картинок на каждом альбоме
             //$withLoad['childAlbums.images'] = fn($q) => $q->orderByRaw($contentSort)->limit($imagesLimitJoin);
         }
 
@@ -373,6 +393,44 @@ class AlbumController extends Controller
         // TODO: мб добавить опцию через сколько времени надо переиндексировать?
         if ($targetAlbum->last_indexation === null)
             AlbumController::indexingAlbumChildren($targetAlbum);
+
+        // Все доступные пользователю альбомы-потомки
+        $getAvailableAlbumIds = function($album, $user) {
+            $albumIds = [$album->id];
+
+            // Получаем всех потомков текущего альбома
+            $album['fetched_descendants'] = $album->descendants()->get();
+
+            if ($album['fetched_descendants']->isNotEmpty()) {
+                $deniedAlbumIds = [];
+
+                foreach ($album['fetched_descendants'] as $descendant) {
+                    // Если родитель этого потомка уже запрещен, то и этот потомок запрещен
+                    if (in_array($descendant->parent_album_id, $deniedAlbumIds)) {
+                        $deniedAlbumIds[] = $descendant->id;
+                        continue;
+                    }
+
+                    switch ($descendant->getAccessLevelCached($user)) {
+                        case AccessLevel::None:
+                            $deniedAlbumIds[] = $descendant->id;
+                            break;
+
+                        case AccessLevel::AsAllowedUser:
+                        case AccessLevel::AsAdmin:
+                            $descendant['sign'] = $descendant->getSign($user);
+                            $albumIds[] = $descendant->id;
+                            break;
+
+                        case AccessLevel::AsGuest:
+                            $albumIds[] = $descendant->id;
+                            break;
+                    }
+                }
+            }
+
+            return $albumIds;
+        };
 
         // Проход по дочерним альбомам и запись сигнатур-токенов для получения картинок
         foreach ($targetAlbum->childAlbums as $index => $child) {
@@ -400,8 +458,65 @@ class AlbumController extends Controller
                 if (count($mediaTypes))
                     $query->whereIn('type', $mediaTypes);
 
-                // FIXME: быстрее, чем жадная загрузка
+                // Быстрее, чем жадная загрузка
                 $child['imagesLoaded'] = $query->get();
+            }
+            // Внуки
+            if ($grandchildsIsRequired) foreach ($child->childAlbums as $gIndex => $grandchild) {
+
+                // Проверка доступа для самого внука
+                $gLevel = $grandchild->getAccessLevelCached($user);
+
+                if ($gLevel === AccessLevel::None) {
+                    $child->childAlbums->forget($gIndex);
+                    continue;
+                }
+
+                if (($gLevel === AccessLevel::AsAllowedUser ||
+                    $gLevel === AccessLevel::AsAdmin)
+                ) $grandchild['sign'] = $grandchild->getSign($user);
+
+
+                if ($grandchildsImages) {
+                    // Вызываем замыкание: собираем ID самого внука и всех его доступных дочерних альбомов
+                    $allGrandchildAlbumIds = $getAvailableAlbumIds($grandchild, $user);
+
+                    $query = Image
+                        ::whereIn('album_id', $allGrandchildAlbumIds)
+                        ->limit($grandchildsImages)
+                        ->orderByRaw($contentSort);
+
+                    if ($contentSortType === 'reacts')
+                        $query->withCount('reactions');
+
+                    if (count($mediaTypes))
+                        $query->whereIn('type', $mediaTypes);
+
+                    $grandchild['imagesLoaded'] = $query->get();
+
+                    foreach ($grandchild['imagesLoaded'] as $image) {
+                        $descendants = $grandchild['fetched_descendants'];
+                        $currentImageAlbum = $descendants?->where('id', $image->album_id)->first();
+                        if (!$currentImageAlbum)
+                            continue;
+
+                        $albumInfo = [
+                            'name' => $currentImageAlbum->name,
+                            'hash' => $currentImageAlbum->hash,
+                        ];
+
+                        if ($currentImageAlbum?->alias)
+                            $albumInfo['alias'] = $currentImageAlbum->alias;
+
+                        if ($currentImageAlbum?->sign)
+                            $albumInfo['sign'] = $currentImageAlbum->sign;
+
+                        if ($currentImageAlbum?->age_rating_id)
+                            $albumInfo['ratingId'] = $currentImageAlbum->age_rating_id;
+
+                        $image->customAlbum = $albumInfo;
+                    }
+                }
             }
         }
 

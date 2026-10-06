@@ -35,6 +35,8 @@ class AlbumRequest extends ApiRequest
             'reverseAlbums' => 'nullable',
             'disrespect'    => 'nullable',
             'simple'        => 'nullable',
+            'grandchilds'   => 'nullable',
+            'gcImages'      => 'int|min:0',
             'ratings'       => 'array',
             'ratings.*'     => ['required', 'int'],
             'types'         => 'array',
