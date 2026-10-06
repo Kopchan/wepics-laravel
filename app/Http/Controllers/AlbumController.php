@@ -545,33 +545,96 @@ class AlbumController extends Controller
         if ($album->getAccessLevelCached() === AccessLevel::None)
             throw new ApiException(403, 'Access denied');
 
+        // Создаем экземпляр вашего контроллера через контейнер зависимостей Laravel
+        $imageController = app(ImageController::class);
+
         $total = 0;
         $count = count($album->images);
-        foreach ($album->images as $image)
+
+        $rootUrl = config('app.internal_url');
+        if ($rootUrl) URL::useOrigin($rootUrl);
+        $scheme = Str::startsWith($rootUrl, 'https://') ? 'https' : 'http';
+        URL::forceScheme($scheme);
+
+        foreach ($album->images as $image) {
             $total += $image->ratio = $image->width / $image->height;
+
+            if (!$rootUrl) {
+                try {
+                    // Вызываем метод thumb() напрямую.
+                    // Передаем параметры точно в том порядке, в каком они объявлены в вашем ImageController::thumb()
+                    $response = $imageController->thumb($album->hash, $image->hash, 'h', 720);
+
+                    // Извлекаем бинарные данные картинки из ответа Laravel
+                    if ($response instanceof BinaryFileResponse) {
+                        // Если контроллер лениво создал файл и возвращает response()->file()
+                        $pathToFile = $response->getFile()->getPathname();
+                        $imageData = file_get_contents($pathToFile);
+                    } else {
+                        // If контроллер возвращает обычный response() с контентом в теле
+                        $imageData = $response->getContent();
+                    }
+
+                    // Кодируем в Base64
+                    $image->base64_thumb = 'data:image/webp;base64,' . base64_encode($imageData);
+
+                } catch (\Exception $e) {
+                    // Если генерация одной картинки упадет, пишем заглушку, чтобы не ломать весь скрипт
+                    $image->base64_thumb = '';
+                }
+            }
+        }
 
         $album->avgRatio = $count > 0 ? $total / $count : 0;
 
-        return view('album', compact('album'));
+        // Предполагаем, что шрифт лежит в каталоге storage/app/fonts/ или public/fonts/
+        $fontPath = public_path('assets/RobotoFlex-DLGGeIPC.woff2');
+
+        $base64Font = '';
+        if (!$rootUrl && file_exists($fontPath))
+            $base64Font = base64_encode(file_get_contents($fontPath));
+
+        return view('og.album', compact('album', 'base64Font'));
     }
 
     public function ogImage($hashOrAlias) {
         $path = storage_path("app/og/{$hashOrAlias}.png");
 
         // Если файл уже существует и не устарел — возвращаем его
-        if (file_exists($path) && now()->diffInMinutes(Carbon::createFromTimestamp(filemtime($path)), absolute: true) < 60) {
-            return response()->file($path, ['Content-Type' => 'image/png']);
-        }
+        if (file_exists($path) &&
+            now()->diffInMinutes(
+                Carbon::createFromTimestamp(filemtime($path)),
+                absolute: true
+            ) < 60
+        ) return response()->file($path, ['Content-Type' => 'image/png']);
 
-        // Генерация HTML
-        $html = $this->ogView($hashOrAlias)->render();
 
         // Убедитесь, что директория существует
         if (!file_exists(dirname($path)))
             mkdir(dirname($path), 0755, true);
 
         // Генерация и сохранение скриншота
-        Browsershot::html($html)
+        $rootUrl = config('app.internal_url');
+        if ($rootUrl) {
+            $scheme = Str::startsWith($rootUrl, 'https://') ? 'https' : 'http';
+            URL::useOrigin($rootUrl);
+            URL::forceScheme($scheme);
+            $browsershot = Browsershot::url(route('get.album.ogView', [$hashOrAlias]));
+        }
+        else {
+            // Генерация HTML
+            $html = $this->ogView($hashOrAlias)->render();
+            $browsershot = Browsershot::html($html);
+        }
+
+        $chromeUrl = env('CHROMIUM_WIDGET_URL');
+        if ($chromeUrl)
+            $browsershot->setWSEndpoint($chromeUrl);
+
+        if (config('app.node_path'))
+            $browsershot->setNodeBinary(config('app.node_path'));
+
+        $browsershot
             ->windowSize(1200, 1200)
             ->save($path);
 

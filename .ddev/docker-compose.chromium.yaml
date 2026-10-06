@@ -1,0 +1,10 @@
+services:
+  chromium:
+    container_name: ddev-${DDEV_SITENAME}-chromium
+    image: browserless/chrome:latest
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    environment:
+      - MAX_CONCURRENT_SESSIONS=5
+    restart: "no"

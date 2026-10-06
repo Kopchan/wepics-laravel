@@ -61,6 +61,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Screenshot Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Used for link rendered in Chromium via Puppeteer.
+    |
+    */
+
+    'internal_url' => env('INTERNAL_URL', 'http://localhost'),
+
+    'chrome_connect_url' => env('CHROMIUM_WIDGET_URL'),
+
+    'chrome_no_sandbox' => env('BROWSERSHOT_NO_SANDBOX', false),
+
+    'node_path' => env('NODE_PATH'),
+
+    'npm_path' => env('NPM_PATH'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
@@ -185,14 +204,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | trusted proxies
+    | Trusted proxies
     |--------------------------------------------------------------------------
     |
-    | The trusted proxies for this application
-    | For
+    | The trusted proxies (webserver reverse_proxy) for this application.
+    | For trust X-* response headers.
     |
     */
 
     'proxies' =>  explode(',', env('TRUSTED_PROXIES', '')),
+
+    'trustXSendfile' =>  boolval(env('TRUST_X_SENDFILE_HEADER', false)),
 
 ];
