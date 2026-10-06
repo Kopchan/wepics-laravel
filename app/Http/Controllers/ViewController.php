@@ -12,7 +12,7 @@ class ViewController extends Controller
 {
     public function index($any = null)
     {
-        return view('index');
+        return view('app');
     }
 
     public function album($albumHashOrAlias = null)
@@ -31,9 +31,9 @@ class ViewController extends Controller
             ])
             ->first();
         if (!$album || $album->getAccessLevelCached() === AccessLevel::None)
-            return view('index');
+            return view('app');
 
-        return view('index', compact('album'));
+        return view('app', compact('album'));
     }
 
     public function image($albumHashOrAlias, $type, $imageHash)
@@ -47,14 +47,14 @@ class ViewController extends Controller
             ])
             ->first();
         if (!$album || $album->getAccessLevelCached() === AccessLevel::None)
-            return view('index');
+            return view('app');
 
         $image = Image
             ::where('hash', $imageHash)
             ->where('album_id', $album->id)
             ->first();
         if (!$image)
-            return view('index', compact('album'));
+            return view('app', compact('album'));
 
         $image->orient = $image->width > $image->height ? 'h' : 'w';
         $minDirection = min($image->width, $image->height);
@@ -68,10 +68,10 @@ class ViewController extends Controller
             $image->heightThumb = (int) round($image->height * $scale);
         }
 
-        $image->urlOrigRoute  = route('get.image.orig' , [$album->hash, $image->hash]);
-        $image->urlThumbRoute = route('get.image.thumb', [$album->hash, $image->hash, $image->orient, 1080]);
+        $image->urlOrigRoute  = route('get.image.orig' , [$album->hash, $image->hash], false);
+        $image->urlThumbRoute = route('get.image.thumb', [$album->hash, $image->hash, $image->orient, 1080], false);
 
-        return view('index', compact('album', 'image'));
+        return view('app', compact('album', 'image'));
     }
 
     public function imageNested($albumHashOrAlias, $trueAlbumHashOrAlias, $type, $imageHash)
@@ -84,21 +84,21 @@ class ViewController extends Controller
             ])
             ->first();
         if (!$album || $album->getAccessLevelCached() === AccessLevel::None)
-            return view('index');
+            return view('app');
 
         $trueAlbum = Album
             ::where ('alias', $trueAlbumHashOrAlias)
             ->orWhere('hash', $trueAlbumHashOrAlias)
             ->first();
         if (!$trueAlbum || $trueAlbum->getAccessLevelCached() === AccessLevel::None)
-            return view('index', compact('album'));
+            return view('app', compact('album'));
 
         $image = Image
             ::where('hash', $imageHash)
             ->where('album_id', $trueAlbum->id)
             ->first();
         if (!$image)
-            return view('index', compact('album'));
+            return view('app', compact('album'));
 
         $image->album = $trueAlbum;
 
@@ -114,9 +114,9 @@ class ViewController extends Controller
             $image->heightThumb = (int) round($image->height * $scale);
         }
 
-        $image->urlOrigRoute  = route('get.image.orig' , [$trueAlbum->hash, $image->hash]);
-        $image->urlThumbRoute = route('get.image.thumb', [$trueAlbum->hash, $image->hash, $image->orient, 1080]);
+        $image->urlOrigRoute  = route('get.image.orig' , [$trueAlbum->hash, $image->hash], false);
+        $image->urlThumbRoute = route('get.image.thumb', [$trueAlbum->hash, $image->hash, $image->orient, 1080], false);
 
-        return view('index', compact('album', 'image'));
+        return view('app', compact('album', 'image'));
     }
 }

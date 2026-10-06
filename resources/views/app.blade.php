@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <title>{{ config('app.name') }}</title>
-    <meta property="og:site_name"            content="{{ config('app.name') }}" />
+    <meta property="og:site_name" content="{{ config('app.name') }}" />
     @if(isset($album))
       @if(!isset($image))
         @php
@@ -46,17 +46,19 @@
         <meta property="og:image:type"       content="image/png" />
         <meta property="og:image:width"      content="1200" />
         <meta property="og:image:height"     content="1200" />
-        <meta property="og:image"            content="{{ route('get.album.og', $album->hash) }}" />
+        <meta property="og:image"            content="{{ route('get.album.og', $album->hash, false) }}" />
         <meta name="twitter:card"            content="summary_large_image">
         <meta name="twitter:image:type"      content="image/png" />
         <meta name="twitter:image:width"     content="1200" />
         <meta name="twitter:image:height"    content="1200" />
-        <meta name="twitter:image"           content="{{ route('get.album.og', $album->hash) }}" />
+        <meta name="twitter:image"           content="{{ route('get.album.og', $album->hash, false) }}" />
       @else
+        <meta property="og:image:type"       content="image/webp" />
         <meta property="og:title"            content="{{ $image->name }}" />
         <meta property="og:image:width"      content="{{ $image->widthThumb }}" />
         <meta property="og:image:height"     content="{{ $image->heightThumb }}" />
         <meta property="og:image"            content="{{ $image->urlThumbRoute }}" />
+        <meta name="twitter:image:type"      content="image/webp" />
         <meta name="twitter:image:width"     content="{{ $image->widthThumb }}" />
         <meta name="twitter:image:height"    content="{{ $image->heightThumb }}" />
         <meta name="twitter:image"           content="{{ $image->urlThumbRoute }}" />
@@ -79,6 +81,7 @@
           <meta name="twitter:player:height" content="{{ $image->height }}" />
           <meta name="twitter:player"        content="{{ $image->urlOrigRoute }}" />
         @else
+          <meta name="twitter:card"          content="summary_large_image">
           <meta property="og:description"    content="Explore {{
             (($album?->images_count ?? 0) > 1
             ? ($album->images_count - 1)." more images in "
@@ -87,7 +90,6 @@
               : ''
             ))
           }}{{ $album->name }}" />
-          <meta name="twitter:card"          content="summary_large_image">
          @endif
       @endif
     @else
@@ -96,34 +98,27 @@
       @else
         <meta property="og:title" content="Wepics" />
       @endif
-      <meta property="og:image" content="/favicon/maskable_icon_x512.png" />
+      <meta property="og:image" content="/icon/maskable512.png" />
     @endif
-
-    <link rel="manifest" href="/manifest.json">
-
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#fff" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#000" media="(prefers-color-scheme:  dark)">
-
-    <meta name="application-name"              content="Wepics">
-    <meta name="mobile-web-app-capable"        content="yes">
-    <meta name="msapplication-navbutton-color" content="#000">
-    <meta name="apple-mobile-web-app-capable"          content="yes">
-    <meta name="apple-mobile-web-app-title"            content="Wepics">
+    <meta name="theme-color" content="#000" media="(prefers-color-scheme: dark)">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
     <meta name="darkreader-lock">
-
-    <link rel="icon"             type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
-    <link rel="apple-touch-icon" type="image/png" sizes="512x512" href="/favicon/icon_x512.png">
-    <link rel="icon"             type="image/svg+xml"             href="/favicon/icon.svg">
-    <script type="module" crossorigin src="/assets/index-CIfMGWzd.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-C412nYey.css">
+    <link rel="icon"             type="image/png" sizes="16x16"   href="/icon/circle16.png">
+    <link rel="icon"             type="image/png" sizes="32x32"   href="/icon/circle32.png">
+    <link rel="icon"             type="image/png" sizes="512x512" href="/icon/circle512.png">
+    <link rel="icon"             type="image/svg+xml"             href="/icon/circle.svg">
+    <link rel="apple-touch-icon" type="image/png" sizes="192x192" href="/icon/maskable192.png">
+    <script type="module" crossorigin src="/assets/index-DrSVe21N.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-2w_otyBV.css">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script>
   </head>
   <body>
     <div id="app"></div>
 
-    <svg style="display: none" width="0" height="0">
+    <svg style="position: absolute; width: 0; height: 0; visibility: hidden" width="0" height="0">
       <filter id="ambient-light" y="-50%" x="-50%" width="200%" height="200%">
         <feGaussianBlur in="SourceGraphic" stdDeviation="40" result="blurred" />
         <feColorMatrix type="saturate" in="blurred" values="4" />

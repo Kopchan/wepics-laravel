@@ -9,8 +9,11 @@
     @font-face {
       font-family: "Roboto Flex";
       font-weight: 100 1000;
-      src: url({{ asset('assets/RobotoFlex-DLGGeIPC.woff2') }}) format("woff2"),
-           url({{ asset('assets/RobotoFlex-BM2Zixa-.ttf') }})   format("truetype");
+      @if(!empty($base64Font))
+        src: url('data:font/woff2;charset=utf-8;base64,{{ $base64Font }}') format('woff2');
+      @else
+        src: url({{ asset('assets/RobotoFlex-DLGGeIPC.woff2') }}) format("woff2");
+      @endif
     }
 
     html {
@@ -106,7 +109,12 @@
     @foreach($album->images as $img)
       <div class="img" style="{{ '--ratio:'. $img->ratio }}">
         <i></i>
-        <img src="{{ route('get.image.thumb', [$album->hash, $img->hash, 'h', 720]) }}" alt="">
+{{--        <img src="{{ config('app.internal_url') . "/api/albums/{$album->hash}/images/{$img->hash}/thumb/h720" }}" alt="">--}}
+          @if(!empty($img->base64_thumb))
+              <img src="{{ $img->base64_thumb }}" alt="">
+          @else
+              <img src="{{ route('get.image.thumb', [$album->hash, $img->hash, 'h', 720]) }}" alt="">
+          @endif
       </div>
     @endforeach
   </div>
