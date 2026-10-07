@@ -33,6 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app'),
+            // New Storage-made dirs must be traversable by nginx (uid 101)
+            // serving files via X-Accel-Redirect; Flysystem default is 0700.
+            'directory_visibility' => 'public',
             'throw' => false,
         ],
 

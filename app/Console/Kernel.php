@@ -13,6 +13,14 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         // $schedule->command('inspire')->hourly();
+
+        // Pick up files added to storage/app/{images,users} without restarts.
+        // Non-interactive flags: --layers (no sort prompt), --missing=skip (no delete prompts).
+        // Production-only so local dev (DDEV) is unaffected.
+        $schedule->command('app:index --layers --missing=skip')
+            ->everyFiveMinutes()
+            ->withoutOverlapping(10)
+            ->when(fn () => app()->isProduction());
     }
 
     /**

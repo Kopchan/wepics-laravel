@@ -8,6 +8,7 @@
 .env
 .env.backup
 .env.production
+docker.env
 .env.dev
 .env.development
 .phpunit.result.cache
@@ -25,3 +26,6 @@ robots.txt
 **/caddy
 frankenphp
 frankenphp-worker.php
+
+/media
+!/media/.gitkeep

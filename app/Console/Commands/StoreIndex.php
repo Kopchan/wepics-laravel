@@ -16,9 +16,19 @@ use ProtoneMedia\LaravelFFMpeg\FFMpeg\FFProbe;
 
 class StoreIndex extends Command
 {
-    protected $signature = 'app:index {--s|start-from=} {--d|auto-destroy} {--l|layers} {--r|recursive}';
+    protected $signature = 'app:index {--s|start-from=} {--m|missing=ask : Missing albums/media policy: destroy, skip, ask} {--l|layers} {--r|recursive}';
 
     protected $description = 'Index root album for new albums/images and remove if not found';
+
+    protected string $missingMode = 'ask';
+
+    /** Выбор удаления из БД */
+    protected function confirmMissingRemoval(int $count, string $question): bool
+    {
+        if ($this->missingMode === 'destroy') return true;
+        if ($this->missingMode === 'skip' || $count === 0) return false;
+        return $this->confirm($question);
+    }
 
     public static function formatNumber($number, $pad = 6, $fg = 'white') {
         $padString = str_pad($number, $pad, '0', STR_PAD_LEFT);
@@ -36,6 +46,12 @@ class StoreIndex extends Command
     {
         //$this->output->getFormatter()->setStyle('error'  , new OutputFormatterStyle('red' ));
         $this->output->getFormatter()->setStyle('comment', new OutputFormatterStyle('gray'));
+
+        $mode = strtolower((string) $this->option('missing'));
+        if (!in_array($mode, ['destroy', 'skip', 'ask'], true)) {
+            throw new \InvalidArgumentException("Invalid --missing value \"$mode\", expected destroy|skip|ask.");
+        }
+        $this->missingMode = $mode;
 
         // Устранение конфликтов иерархии
         $this->line('Fixing tree...');
@@ -102,7 +118,8 @@ class StoreIndex extends Command
         // Проход по альбомам
         while ($albums->count() > $currentAlbumKey) {
             $currentAlbum = $albums[$currentAlbumKey];
-            $path = Storage::path("images$currentAlbum->path");
+            // Storage::path() strips the trailing slash, restore it for glob() below
+            $path = rtrim(Storage::path("images$currentAlbum->path"), '/').'/';
 
             $currentAlbumKey++;
             $this->line('<fg=gray;options=bold>['.static::counter($currentAlbumKey, $albums->count())
@@ -118,12 +135,11 @@ class StoreIndex extends Command
             }
             catch (DirectoryNotFoundException $e)
             {
-                // Альбом не найден, спрашиваем "удалить ли", если не было передано опции авто-удаления
+                // Альбом не найден, удаление по политике --missing
                 $this->error(' DELETED ');
                 if (!Album::find($currentAlbum->id)) continue;
 
-                if ($this->option('auto-destroy') ||
-                    $this->confirm("Do you wish remove not founded albums from DB? ["
+                if ($this->confirmMissingRemoval(1, "Do you wish remove not founded albums from DB? ["
                     .$currentAlbum->children->count()." subalbums & ". $currentAlbum->images->count() ." images known]")
                 ) Album::destroy($currentAlbum->id);
 
@@ -191,12 +207,11 @@ class StoreIndex extends Command
             }
             $albums->splice($currentAlbumKey, 0, $newAlbums);
 
-            // Спрашиваем "удалить ли не найденные альбомы", если не было передано опции авто-удаления
+            // Удаление не найденных альбомов по политике --missing
             $notFoundedCount = $albumChildren->count();
-            if ($this->option('auto-destroy') || (
-                $notFoundedCount &&
-                $this->confirm("Do you wish remove not founded albums from DB? [$notFoundedCount]")
-            )) {
+            if ($this->confirmMissingRemoval($notFoundedCount,
+                "Do you wish remove not founded albums from DB? [$notFoundedCount]")
+            ) {
                 Album::destroy($albumChildren->pluck('id')->toArray());
             }
 
@@ -526,12 +541,11 @@ class StoreIndex extends Command
                     $this->error($e);
                 }
             }
-            // Спрашиваем "удалить ли не найденные медиа", если не было передано опции авто-удаления
+            // Удаление не найденных медиа по политике --missing
             $notFoundedCount = count($notFoundedImages);
-            if ($this->option('auto-destroy') || (
-                $notFoundedCount &&
-                $this->confirm("Do you wish remove not founded images and duplicas from DB? [$notFoundedCount]")
-            )) {
+            if ($this->confirmMissingRemoval($notFoundedCount,
+                "Do you wish remove not founded images and duplicas from DB? [$notFoundedCount]")
+            ) {
                 Image::destroy(array_column($notFoundedOrigs, 'id'));
 
                 foreach ($notFoundedDuplicas as $duplica) {

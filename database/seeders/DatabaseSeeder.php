@@ -4,12 +4,14 @@ namespace Database\Seeders;
 
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use App\Models\AgeRating;
+use App\Models\Album;
 use App\Models\Reaction;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
+    /** Вставить массив если не существует */
     protected static function insertIfNotExists($model, array $uniqueKeys, array $rows)
     {
         foreach ($rows as $row) {
@@ -31,15 +33,23 @@ class DatabaseSeeder extends Seeder
     }
     public function run(): void
     {
-        self::insertIfNotExists(User::class, ['login'], [
-            [
-                'nickname' => 'Administrator',
-                'login'    => 'admin',
-                'password' => 'admin123',
-                'is_admin' => true,
-            ],
-        ]);
+        // Создание коренного альбома
+        Album::getByHash('root');
 
+        // Создание администратора со стандартным паролём —
+        // только на пустой таблице (первая установка / восстановление доступа).
+        if (!User::query()->exists()) {
+            self::insertIfNotExists(User::class, ['login'], [
+                [
+                    'nickname' => 'Administrator',
+                    'login'    => 'admin',
+                    'password' => 'admin123',
+                    'is_admin' => true,
+                ],
+            ]);
+        }
+
+        // Создание стандартных возрастных рейтингов
         self::insertIfNotExists(AgeRating::class, ['code', 'name'], [
             [
                 'code' => 'G',
@@ -83,6 +93,7 @@ class DatabaseSeeder extends Seeder
             ],
         ]);
 
+        // Создание стандартных реакций
         self::insertIfNotExists(Reaction::class, ['value'], [
             ['value' => '👍'],
             ['value' => '👎'],

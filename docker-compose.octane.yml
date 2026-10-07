@@ -1,0 +1,167 @@
+# Wepics PROD Octane variant (FrankenPHP + Caddy, without separate nginx)
+#
+# Media files (response()->file()) are served by Caddy via X-Accel-Redirect,
+# same mapping as nginx variant: storage/app/ <-> /protected_storage/.
+# See docker/octane/Caddyfile (passed to octane:start via --caddyfile).
+#
+# Zero-config start (no env files needed):
+#   docker compose -f docker-compose.octane.yml up -d --build
+#   open http://localhost:8080
+#
+# Optional overrides: copy docker.env.example to docker.env and edit it
+# (APP_NAME, APP_URL, UPLOAD_*). Infra is pinned as literals, so a dev
+# `.env` in this folder can never break prod (e.g. REDIS_PASSWORD=null).
+
+name: wepics-octane
+
+# Only user-facing settings use ${VAR:-default}. Infra wiring is literals.
+x-laravel: &laravel-env
+  APP_NAME: ${APP_NAME:-Wepics}
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  UPLOAD_ENABLE: ${UPLOAD_ENABLE:-true}
+  UPLOAD_DISABLE_PERCENTAGE: ${UPLOAD_DISABLE_PERCENTAGE:-90}
+  DEFAULT_QUOTA_BYTES: ${DEFAULT_QUOTA_BYTES:-0}
+  ALLOWED_EXT_IMAGE: ${ALLOWED_EXT_IMAGE:-jpeg,jpg,png,gif,webp,avif}
+  ALLOWED_EXT_VIDEO: ${ALLOWED_EXT_VIDEO:-mp4,mp4v,webm,mkv}
+  ALLOWED_EXT_AUDIO: ${ALLOWED_EXT_AUDIO:-mp3,ogg,flac,opus}
+  ALLOWED_PREVIEW_SIZES: ${ALLOWED_PREVIEW_SIZES:-144,240,360,480,720,1080}
+  APP_ENV: production
+  APP_DEBUG: "false"
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: warning
+  DB_CONNECTION: mysql
+  DB_HOST: db
+  DB_PORT: "3306"
+  DB_DATABASE: wepics
+  DB_USERNAME: wepics
+  DB_PASSWORD: wepics
+  CACHE_DRIVER: redis
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: wepics
+  BROWSERSHOT_NO_SANDBOX: "true"
+  PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+  # Caddy serves response()->file() via X-Accel-Redirect (see docker/octane/Caddyfile)
+  TRUST_X_SENDFILE_HEADER: "true"
+  INTERNAL_URL: http://app:8000
+  CHROMIUM_WIDGET_URL: ws://chromium:3000
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.octane
+      args:
+        WITH_NODE: ${WITH_NODE:-true}
+    image: wepics-octane
+    restart: unless-stopped
+    ports:
+      - "8080:8000"
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      <<: *laravel-env
+    volumes:
+      - ./media:/var/www/html/storage/app/images:ro
+      - thumbs:/var/www/html/storage/app/thumbs
+      - og:/var/www/html/storage/app/og
+      - userdata:/var/www/html/storage/app/users
+      - state:/state
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  queue:
+    image: wepics-octane
+    restart: unless-stopped
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      <<: *laravel-env
+      SKIP_BOOTSTRAP: "1"
+    volumes:
+      - ./media:/var/www/html/storage/app/images:ro
+      - thumbs:/var/www/html/storage/app/thumbs
+      - og:/var/www/html/storage/app/og
+      - userdata:/var/www/html/storage/app/users
+      - state:/state
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  scheduler:
+    image: wepics-octane
+    restart: unless-stopped
+    command: php artisan schedule:work
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      <<: *laravel-env
+      SKIP_BOOTSTRAP: "1"
+    volumes:
+      - ./media:/var/www/html/storage/app/images:ro
+      - thumbs:/var/www/html/storage/app/thumbs
+      - og:/var/www/html/storage/app/og
+      - userdata:/var/www/html/storage/app/users
+      - state:/state
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb-buffer-pool-size=512M
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      MARIADB_DATABASE: wepics
+      MARIADB_USER: wepics
+      MARIADB_PASSWORD: wepics
+      MARIADB_ROOT_PASSWORD: wepics-root
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass wepics
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "wepics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  chromium:
+    image: browserless/chrome:latest
+    restart: "no"
+    profiles: ["og-chrome"]
+
+volumes:
+  dbdata:
+  redisdata:
+  thumbs:
+  og:
+  # User-uploaded albums (storage/app/users). storage/app/public is unused.
+  userdata:
+  state:

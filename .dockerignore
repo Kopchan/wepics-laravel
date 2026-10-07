@@ -1,0 +1,15 @@
+.git
+.ddev
+.idea
+.vscode
+node_modules
+vendor
+storage/app/images/*
+storage/app/thumbs/*
+storage/app/og/*
+storage/logs/*
+.env*
+!.env.example
+docker.env
+media/
+db_snapshots/

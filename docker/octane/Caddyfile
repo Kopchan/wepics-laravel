@@ -1,0 +1,70 @@
+# FrankenPHP Caddyfile for `octane:start --server=frankenphp --caddyfile=...`.
+# Based on Octane's stub (vendor/laravel/octane/src/Commands/stubs/Caddyfile):
+# same {$...} placeholders (with empty defaults so `caddy validate` works
+# without Octane's env), plus X-Sendfile support mirroring
+# docker/nginx/default.conf (`/protected_storage/` + HTTP_X_ACCEL_MAPPING).
+#
+# Flow: Caddy injects X-Sendfile-Type/X-Accel-Mapping into the request,
+# Symfony translates storage/app/... paths into an urlencoded
+# X-Accel-Redirect URI, `intercept` serves that file via file_server
+# without passing bytes through PHP.
+{
+	{$CADDY_GLOBAL_OPTIONS:}
+
+	admin {$CADDY_SERVER_ADMIN_HOST:localhost}:{$CADDY_SERVER_ADMIN_PORT:2019}
+
+	frankenphp {
+		worker {
+			file "{$APP_PUBLIC_PATH:/var/www/html/public}/frankenphp-worker.php"
+			{$CADDY_SERVER_WORKER_DIRECTIVE:}
+			{$CADDY_SERVER_WATCH_DIRECTIVES:}
+		}
+	}
+}
+
+{$CADDY_EXTRA_CONFIG:}
+
+{$CADDY_SERVER_SERVER_NAME:http://:8000} {
+	log {
+		level {$CADDY_SERVER_LOG_LEVEL:WARN}
+
+		# Redact the authorization query parameter that can be set by Mercure...
+		format filter {
+			wrap {$CADDY_SERVER_LOGGER:json}
+			fields {
+				uri query {
+					replace authorization REDACTED
+				}
+			}
+		}
+	}
+
+	root * "{$APP_PUBLIC_PATH:/var/www/html/public}"
+	encode zstd br gzip
+
+	# Let Symfony map storage paths to X-Accel-Redirect URIs.
+	request_header X-Sendfile-Type x-accel-redirect
+	request_header X-Accel-Mapping "/var/www/html/storage/app/=/protected_storage/"
+
+	intercept {
+		@sendfile header X-Accel-Redirect *
+		handle_response @sendfile {
+			root * /var/www/html/storage/app
+			rewrite * {resp.header.X-Accel-Redirect}
+			uri strip_prefix /protected_storage
+			method * GET
+			header -X-Accel-Redirect
+			file_server
+		}
+	}
+
+	# Mercure configuration is injected here...
+	{$CADDY_SERVER_EXTRA_DIRECTIVES:}
+
+	php_server {
+		index frankenphp-worker.php
+		try_files {path} frankenphp-worker.php
+		# Required for the public/storage/ directory...
+		resolve_root_symlink
+	}
+}

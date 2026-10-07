@@ -4,7 +4,42 @@
 
 This backend for [Wepics WebUI](https://github.com/Kopchan/wepics-vue)
 
-## Setup
+
+## Self-hosted with Docker (zero-config)
+
+No configuration needed — just [Docker Desktop](https://www.docker.com/products/docker-desktop/):
+
+```bash
+docker compose up -d --build
+```
+
+Open [http://localhost:8080](http://localhost:8080) and put photo folders into `./media/`
+(or mount your own folder in `docker-compose.yml`, see the `app` volumes).
+New files are picked up automatically within ~5 minutes (scheduled `app:index`);
+as a fallback they are also indexed on every stack (re)start.
+Impatient: `docker compose exec app php artisan app:index`
+
+Optional overrides via a `docker.env` file next to `docker-compose.yml`
+(copy `docker.env.example` to `docker.env`):
+
+```env
+APP_NAME=MyGallery
+APP_URL=http://localhost:8080
+UPLOAD_ENABLE=true
+```
+
+Octane workers variant (maybe faster): `docker compose -f docker-compose.octane.yml up -d --build`
+
+OG screenshots need Chromium: 
+
+`docker compose --profile chromium up -d --build` 
+
+or octane variant:
+
+`docker compose -f docker-compose.octane.yml --profile chromium up -d --build`.
+
+
+## Setup (dev, XAMPP)
 
 Complete prerequirements:
 * Install [Git](https://git-scm.com/download) to cloning this repo 

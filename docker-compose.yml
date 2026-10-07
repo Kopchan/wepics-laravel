@@ -1,0 +1,190 @@
+# Wepics PROD for desktop: php-fpm + nginx (recommended, same as DDEV)
+#
+# Zero-config start (no env files needed):
+#   docker compose up -d --build
+#   open http://localhost:8080, put photos into ./media/
+#
+# Optional overrides: copy docker.env.example to docker.env and edit it
+# (APP_NAME, APP_URL, UPLOAD_*). Everything else is pinned below as literals,
+# so a dev `.env` in this folder can never break prod (e.g. REDIS_PASSWORD=null).
+# Full isolation from a dev `.env` (incl. APP_URL): docker compose --env-file docker.env up -d
+#
+# DDEV (.ddev/) is dev-only and is NOT used here.
+
+name: wepics
+
+# Only the user-facing settings use ${VAR:-default} (overridable via shell
+# env, docker.env, or --env-file). Infra wiring is literals on purpose.
+x-laravel: &laravel-env
+  APP_NAME: ${APP_NAME:-Wepics}
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  UPLOAD_ENABLE: ${UPLOAD_ENABLE:-true}
+  UPLOAD_DISABLE_PERCENTAGE: ${UPLOAD_DISABLE_PERCENTAGE:-90}
+  DEFAULT_QUOTA_BYTES: ${DEFAULT_QUOTA_BYTES:-0}
+  ALLOWED_EXT_IMAGE: ${ALLOWED_EXT_IMAGE:-jpeg,jpg,png,gif,webp,avif}
+  ALLOWED_EXT_VIDEO: ${ALLOWED_EXT_VIDEO:-mp4,mp4v,webm,mkv}
+  ALLOWED_EXT_AUDIO: ${ALLOWED_EXT_AUDIO:-mp3,ogg,flac,opus}
+  ALLOWED_PREVIEW_SIZES: ${ALLOWED_PREVIEW_SIZES:-144,240,360,480,720,1080}
+  APP_ENV: production
+  APP_DEBUG: "false"
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: warning
+  DB_CONNECTION: mysql
+  DB_HOST: db
+  DB_PORT: "3306"
+  DB_DATABASE: wepics
+  DB_USERNAME: wepics
+  DB_PASSWORD: wepics
+  CACHE_DRIVER: redis
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: wepics
+  BROWSERSHOT_NO_SANDBOX: "true"
+  PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+  # Prod nginx serves response()->file() via X-Accel-Redirect (see docker/nginx/default.conf)
+  TRUST_X_SENDFILE_HEADER: "true"
+  INTERNAL_URL: http://web
+  CHROMIUM_WIDGET_URL: ws://chromium:3000
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        WITH_NODE: ${WITH_NODE:-true}
+    image: wepics-app
+    restart: unless-stopped
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      <<: *laravel-env
+    volumes:
+      # Your media library -> storage/app/images inside container (read-only:
+      # the app never writes originals, uploads go to storage/app/users).
+      # Option A (simple): copy album folders into ./media/ (created automatically if missing)
+      # Option B: replace with absolute path: D:/Photos:/var/www/html/storage/app/images:ro
+      # (symlinks inside ./media pointing outside do NOT resolve in Docker on Windows)
+      - ./media:/var/www/html/storage/app/images:ro
+      - thumbs:/var/www/html/storage/app/thumbs
+      - og:/var/www/html/storage/app/og
+      # Albums uploaded via WebUI (storage/app/users) must survive rebuilds
+      - userdata:/var/www/html/storage/app/users
+      - state:/state
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      # NOTE: no whole-repo mount here on purpose: named volumes below cannot
+      # be nested inside a read-only bind (Docker fails to create mountpoints).
+      # nginx only needs public/ + the storage dirs served via X-Accel-Redirect.
+      - ./public:/var/www/html/public:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./media:/var/www/html/storage/app/images:ro
+      - thumbs:/var/www/html/storage/app/thumbs:ro
+      - og:/var/www/html/storage/app/og:ro
+      - userdata:/var/www/html/storage/app/users:ro
+    depends_on:
+      - app
+
+  queue:
+    image: wepics-app
+    restart: unless-stopped
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      <<: *laravel-env
+      SKIP_BOOTSTRAP: "1"
+    volumes:
+      - ./media:/var/www/html/storage/app/images:ro
+      - thumbs:/var/www/html/storage/app/thumbs
+      - og:/var/www/html/storage/app/og
+      - userdata:/var/www/html/storage/app/users
+      - state:/state
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  scheduler:
+    image: wepics-app
+    restart: unless-stopped
+    command: php artisan schedule:work
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      <<: *laravel-env
+      SKIP_BOOTSTRAP: "1"
+    volumes:
+      - ./media:/var/www/html/storage/app/images:ro
+      - thumbs:/var/www/html/storage/app/thumbs
+      - og:/var/www/html/storage/app/og
+      - userdata:/var/www/html/storage/app/users
+      - state:/state
+    depends_on:
+      app:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb-buffer-pool-size=512M
+    env_file:
+      - path: docker.env
+        required: false
+    environment:
+      MARIADB_DATABASE: wepics
+      MARIADB_USER: wepics
+      MARIADB_PASSWORD: wepics
+      MARIADB_ROOT_PASSWORD: wepics-root
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass wepics
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "wepics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Optional: needed only for OG screenshots. Safe to ignore if unused.
+  chromium:
+    image: browserless/chrome:latest
+    restart: "no"
+    profiles: ["og-chrome"]
+
+volumes:
+  dbdata:
+  redisdata:
+  thumbs:
+  og:
+  # User-uploaded albums (storage/app/users).
+  userdata:
+  # Persists the auto-generated APP_KEY across restarts.
+  state:
