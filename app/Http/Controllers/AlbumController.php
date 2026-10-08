@@ -734,7 +734,7 @@ class AlbumController extends Controller
             $scheme = Str::startsWith($rootUrl, 'https://') ? 'https' : 'http';
             URL::useOrigin($rootUrl);
             URL::forceScheme($scheme);
-            $browsershot = Browsershot::url(route('album.ogView', [$hashOrAlias]));
+            $browsershot = Browsershot::url(URL::signedRoute('album.ogView', [$hashOrAlias]));
         }
         else {
             // Генерация HTML

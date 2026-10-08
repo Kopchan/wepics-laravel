@@ -74,7 +74,7 @@ Route
     $album->get('info',   'get'      )->name('album');
     $album->get('og.png', 'ogImage'  )->name('album.ogLegacy');
     $album->get('og',     'ogImage'  )->name('album.og');
-    $album->get('ogView', 'ogView'   )->name('album.ogView');
+    $album->get('ogView', 'ogView'   )->name('album.ogView')->middleware('signed'); // Internal only (Browsershot fetches signed URL)
     $album->post('invite',
         [InvitationController::class, 'store']) // Генерировать код приглашения на СВОЙ альбом
         ->middleware('token.auth:owner')
@@ -102,7 +102,7 @@ Route
         $albumMedias->middleware('token.auth:owner')->post('', 'upload')   ->name('album.images.upload');
         $albumMedias->prefix('{image_hash}')->group(function ($media) {
             $media->middleware('token.auth:owner')->delete('', 'delete')->name('image.delete');
-            $media->middleware('token.auth:owner')->patch ('', 'rename')->name('image.rename');
+            $media->middleware('token.auth:owner')->patch ('', 'rename')->name('image.update');
             $media->get('',         'info')->name('image.info');
             $media->get('orig',     'orig')
                 ->withoutMiddleware('throttle:api')
