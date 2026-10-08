@@ -18,6 +18,7 @@ class StreamHelper
      */
     public static function extractPreview($videoPath, $video): ?string
     {
+        $startedAt = microtime(true);
         $outputDir = Storage::path("thumbs/frames");
         try {
             @mkdir($outputDir, 0775, true);
@@ -39,9 +40,18 @@ class StreamHelper
             }
         }
         if ($coverStream)
-            return self::extractAttachedCover($videoPath, $outputDir, $coverStream, $video->hash);
+            $result = self::extractAttachedCover($videoPath, $outputDir, $coverStream, $video->hash);
         else
-            return self::extractVideoFrame($videoPath, $outputDir, $video->duration_ms, $video->hash);
+            $result = self::extractVideoFrame($videoPath, $outputDir, $video->duration_ms, $video->hash);
+
+        $ms = (int) round((microtime(true) - $startedAt) * 1000);
+        $message = "🎬 ffmpeg extractPreview " . basename($videoPath) . " {$ms}ms";
+        if ($ms >= config('logging.slow_thumb_ms', 2000))
+            Log::warning("$message 🐌SLOW");
+        else
+            Log::info($message);
+
+        return $result;
     }
 
     /**

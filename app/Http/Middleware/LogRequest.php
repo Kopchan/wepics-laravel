@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\QueryPerf;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,8 +11,17 @@ use Jenssegers\Agent\Agent;
 
 class LogRequest
 {
+    /** Collapse hashes/ids so per-route stats group properly. */
+    public static function normalizePath(string $path): string
+    {
+        return preg_replace('~[A-Za-z0-9_-]{20,}~', '{hash}', $path) ?? $path;
+    }
+
     public function handle(Request $request, Closure $next)
     {
+        $request->attributes->set('perf_started_at', microtime(true));
+        QueryPerf::reset();
+
         if (!config('logging.dbQueries', false))
             return $next($request);
 
@@ -28,6 +38,35 @@ class LogRequest
 
     public function terminate(Request $request, $response)
     {
+        try {
+            // Always-on compact perf line (default channel -> stderr in prod).
+            $startedAt = $request->attributes->get('perf_started_at', microtime(true));
+            $ms = (int) round((microtime(true) - $startedAt) * 1000);
+            [$qCount, $dbMs] = QueryPerf::snapshot();
+            $thumbMs = $request->attributes->get('thumb_ms');
+            $slow = $ms >= config('logging.slow_request_ms', 1000) ? ' 🐌SLOW' : '';
+            $message = "⏱ {$request->getMethod()} {$request->getPathInfo()} {$response->getStatusCode()} {$ms}ms 🗄{$qCount}q/{$dbMs}ms"
+                . ($thumbMs !== null ? " 🖼{$thumbMs}ms" : '')
+                . $slow;
+            if ($slow !== '')
+                Log::warning($message);
+            else
+                Log::info($message);
+
+            QueryPerf::pushRequest([
+                't' => time(),
+                'route' => $request->route()?->getName(),
+                'path' => self::normalizePath($request->getPathInfo()),
+                'method' => $request->getMethod(),
+                'status' => $response->getStatusCode(),
+                'ms' => $ms, 'db_q' => $qCount, 'db_ms' => $dbMs,
+                'thumb_ms' => $thumbMs, 'slow' => $slow !== '',
+            ]);
+        }
+        catch (\Exception $exception) {
+            Log::error($exception);
+        }
+
         if (!config('logging.dbQueries', false))
             return;
 

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wepics Perf</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #111; color: #ddd; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; } h2 { font-size: 16px; margin-top: 28px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+  #bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  input, button { background: #222; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 6px 10px; }
+  button { cursor: pointer; } button:hover { background: #333; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #222; white-space: nowrap; }
+  th { color: #888; font-weight: 600; }
+  td.route, td.sql { white-space: normal; word-break: break-all; font-family: monospace; font-size: 12px; }
+  .bar { display: inline-block; height: 8px; background: #2a7; border-radius: 2px; vertical-align: middle; }
+  .slow { color: #f66; font-weight: 700; }
+  .muted { color: #777; }
+  #err { color: #f66; }
+</style>
+</head>
+<body>
+<h1>⏱ Wepics Perf</h1>
+<div id="bar">
+  <input id="base" size="28" placeholder="API base" title="API base URL">
+  <input id="token" size="40" placeholder="admin token" title="Bearer token of an admin user">
+  <button id="save">Save</button>
+  <button id="load">↻ Refresh</button>
+  <button id="clear">🗑 Clear</button>
+  <label class="muted"><input type="checkbox" id="auto" checked> auto 10s</label>
+  <span id="err"></span>
+</div>
+
+<h2>Routes (p95 desc)</h2>
+<table><thead><tr><th>Route</th><th>req</th><th>avg</th><th>p50</th><th>p95</th><th>max</th><th>slow</th></tr></thead>
+<tbody id="routes"><tr><td colspan="7" class="muted">no data yet — open the gallery to generate traffic</td></tr></tbody></table>
+
+<h2>Recent slow requests</h2>
+<table><thead><tr><th>Time</th><th>Route</th><th>Status</th><th>ms</th><th>db</th><th>thumb</th></tr></thead>
+<tbody id="slow"><tr><td colspan="6" class="muted">—</td></tr></tbody></table>
+
+<h2>Slow queries</h2>
+<table><thead><tr><th>Time</th><th>ms</th><th>SQL</th></tr></thead>
+<tbody id="queries"><tr><td colspan="3" class="muted">—</td></tr></tbody></table>
+
+<script>
+const $ = id => document.getElementById(id);
+const base = $('base'), token = $('token');
+base.value = localStorage.getItem('perf_base') || location.origin;
+token.value = localStorage.getItem('perf_token') || '';
+$('save').onclick = () => {
+  localStorage.setItem('perf_base', base.value);
+  localStorage.setItem('perf_token', token.value);
+  load();
+};
+$('load').onclick = load;
+$('clear').onclick = async () => {
+  if (!confirm('Clear perf buffers (requests + slow queries)?')) return;
+  try {
+    const r = await fetch(base.value.replace(/\/$/, '') + '/api/perf', {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token.value }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    load();
+  } catch (e) { $('err').textContent = e.message; }
+};
+setInterval(() => { if ($('auto').checked && token.value) load(); }, 10000);
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function time(ts) { return new Date(ts * 1000).toLocaleTimeString(); }
+function bar(v, max) {
+  const w = max > 0 ? Math.round(v / max * 120) : 0;
+  const c = v >= 1000 ? '#f66' : v >= 300 ? '#fa0' : '#2a7';
+  return `<span class="bar" style="width:${w}px;background:${c}"></span> ${v}`;
+}
+
+async function load() {
+  $('err').textContent = '';
+  try {
+    const r = await fetch(base.value.replace(/\/$/, '') + '/api/perf', {
+      headers: { 'Authorization': 'Bearer ' + token.value }
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' (need admin token)');
+    const d = await r.json();
+
+    const maxP95 = Math.max(1, ...(d.routes || []).map(x => x.p95_ms));
+    $('routes').innerHTML = (d.routes || []).map(x => `<tr>
+      <td class="route">${esc(x.route)}<br><span class="muted">${esc(x.path)}</span></td><td>${x.count}</td>
+      <td>${x.avg_ms}</td><td>${x.p50_ms}</td>
+      <td>${bar(x.p95_ms, maxP95)}</td><td>${x.max_ms}</td>
+      <td class="${x.slow ? 'slow' : ''}">${x.slow || ''}</td></tr>`).join('')
+      || '<tr><td colspan="7" class="muted">no data yet</td></tr>';
+
+    $('slow').innerHTML = (d.recent_slow || []).map(x => `<tr>
+      <td class="muted">${time(x.t)}</td><td class="route">${esc(x.method)} ${esc(x.route)}<br><span class="muted">${esc(x.path)}</span></td>
+      <td>${x.status}</td><td class="slow">${x.ms}</td>
+      <td>${x.db_q}q/${x.db_ms}ms</td><td>${x.thumb_ms ?? '—'}</td></tr>`).join('')
+      || '<tr><td colspan="6" class="muted">—</td></tr>';
+
+    $('queries').innerHTML = (d.slow_queries || []).map(q => `<tr>
+      <td class="muted">${time(q.t)}</td><td class="slow">${q.ms}</td>
+      <td class="sql">${esc(q.sql)} <span class="muted">${esc(q.bindings)}</span></td></tr>`).join('')
+      || '<tr><td colspan="3" class="muted">—</td></tr>';
+  } catch (e) { $('err').textContent = e.message; }
+}
+if (token.value) load();
+</script>
+</body>
+</html>

@@ -9,6 +9,15 @@ return [
 
     'dbQueries' => env('LOG_DB_QUERIES', false),
 
+    // Perf thresholds (ms) for the always-on compact timing log.
+    // In prod (LOG_LEVEL=warning) only 🐌SLOW lines are visible; dev sees everything.
+    'slow_request_ms' => (int) env('LOG_SLOW_REQUEST_MS', 1000),
+    'slow_db_ms' => (int) env('LOG_SLOW_DB_MS', 200),
+    'slow_thumb_ms' => (int) env('LOG_SLOW_THUMB_MS', 2000),
+
+    // Perf panel ring buffers in Redis (see App\Support\QueryPerf).
+    'perf_panel' => env('PERF_PANEL', true),
+
     /*
     |--------------------------------------------------------------------------
     | Default Log Channel

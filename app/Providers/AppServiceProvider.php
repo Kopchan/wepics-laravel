@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\QueryPerf;
 use Illuminate\Support\ServiceProvider;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -22,5 +23,7 @@ class AppServiceProvider extends ServiceProvider
     {
         if (config('app.trustXSendfile'))
             BinaryFileResponse::trustXSendfileTypeHeader();
+
+        QueryPerf::registerListener();
     }
 }
