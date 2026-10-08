@@ -15,7 +15,6 @@ return new class extends Migration
     public function up()
     {
         $output = new ConsoleOutput();
-        $output->writeln('');
 
         $files = Storage::files('thumbs');
 
@@ -24,7 +23,8 @@ return new class extends Migration
         })->values();
 
         $count = $filtered->count();
-        $output->writeln('Selected '. $count .' thumbs');
+        if ($count)
+            $output->writeln("\nSelected ". $count .' thumbs');
 
         foreach ($filtered as $i => $path) {
             preg_match('/thumbsOld\/([a-f0-9]{16})-(\w+)(\d+)\.webp$/', $path, $matches);

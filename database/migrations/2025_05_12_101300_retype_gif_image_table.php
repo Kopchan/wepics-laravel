@@ -15,7 +15,6 @@ return new class extends Migration
     public function up()
     {
         $output = new ConsoleOutput();
-        $output->writeln('');
 
         $images = DB::table('images')
             ->join('albums', 'images.album_id', '=', 'albums.id')
@@ -29,7 +28,9 @@ return new class extends Migration
             ->get();
 
         $count = $images->count();
-        $output->writeln('Selected '. $count .' images');
+        if ($count)
+            $output->writeln("\nSelected ". $count .' images');
+
         $probe = FFProbe::create();
 
         foreach ($images as $i => $image) {

@@ -15,7 +15,6 @@ return new class extends Migration
     public function up()
     {
         $output = new ConsoleOutput();
-        $output->writeln('');
 
         $images = DB::table('images')
             ->select('id', 'name', 'hash')
@@ -23,7 +22,8 @@ return new class extends Migration
             ->get();
 
         $count = $images->count();
-        $output->writeln('Selected '. $count .' images');
+        if ($count)
+            $output->writeln("\nSelected ". $count .' images');
 
         foreach ($images as $i => $image) {
             $output->write(

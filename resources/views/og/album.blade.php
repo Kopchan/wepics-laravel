@@ -113,7 +113,7 @@
           @if(!empty($img->base64_thumb))
               <img src="{{ $img->base64_thumb }}" alt="">
           @else
-              <img src="{{ route('get.image.thumb', [$album->hash, $img->hash, 'h', 720]) }}" alt="">
+              <img src="{{ route('image.thumb', [$album->hash, $img->hash, 'h', 720]) }}" alt="">
           @endif
       </div>
     @endforeach

@@ -734,7 +734,7 @@ class AlbumController extends Controller
             $scheme = Str::startsWith($rootUrl, 'https://') ? 'https' : 'http';
             URL::useOrigin($rootUrl);
             URL::forceScheme($scheme);
-            $browsershot = Browsershot::url(route('get.album.ogView', [$hashOrAlias]));
+            $browsershot = Browsershot::url(route('album.ogView', [$hashOrAlias]));
         }
         else {
             // Генерация HTML
@@ -742,7 +742,7 @@ class AlbumController extends Controller
             $browsershot = Browsershot::html($html);
         }
 
-        $chromeUrl = env('CHROMIUM_WIDGET_URL');
+        $chromeUrl = config('app.chrome_connect_url');
         if ($chromeUrl)
             $browsershot->setWSEndpoint($chromeUrl);
 

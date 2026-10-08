@@ -46,12 +46,12 @@
         <meta property="og:image:type"       content="image/png" />
         <meta property="og:image:width"      content="1200" />
         <meta property="og:image:height"     content="1200" />
-        <meta property="og:image"            content="{{ route('get.album.og', $album->hash, false) }}" />
+        <meta property="og:image"            content="{{ route('album.og', $album->hash, false) }}" />
         <meta name="twitter:card"            content="summary_large_image">
         <meta name="twitter:image:type"      content="image/png" />
         <meta name="twitter:image:width"     content="1200" />
         <meta name="twitter:image:height"    content="1200" />
-        <meta name="twitter:image"           content="{{ route('get.album.og', $album->hash, false) }}" />
+        <meta name="twitter:image"           content="{{ route('album.og', $album->hash, false) }}" />
       @else
         <meta property="og:image:type"       content="image/webp" />
         <meta property="og:title"            content="{{ $image->name }}" />

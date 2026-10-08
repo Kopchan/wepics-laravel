@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::controller(ViewController::class)->group(function ($view) {
     $view->view('',        'app'  )->name('home');
-    $view->get ('{album}', 'album')->name('album');
+    $view->get ('{album}', 'album')->name('view-album');
     $view->get ('{album}/{type}/{image}',             'image')      ->where('type', 'i|a|v');
     $view->get ('{album}/{trueAlbum}/{type}/{image}', 'imageNested')->where('type', 'i|a|v');
     $view->view('{any?}', 'app')->where('any', '.*')->name('any');

@@ -68,8 +68,8 @@ class ViewController extends Controller
             $image->heightThumb = (int) round($image->height * $scale);
         }
 
-        $image->urlOrigRoute  = route('get.image.orig' , [$album->hash, $image->hash], false);
-        $image->urlThumbRoute = route('get.image.thumb', [$album->hash, $image->hash, $image->orient, 1080], false);
+        $image->urlOrigRoute  = route('image.orig' , [$album->hash, $image->hash], false);
+        $image->urlThumbRoute = route('image.thumb', [$album->hash, $image->hash, $image->orient, 1080], false);
 
         return view('app', compact('album', 'image'));
     }
@@ -114,8 +114,8 @@ class ViewController extends Controller
             $image->heightThumb = (int) round($image->height * $scale);
         }
 
-        $image->urlOrigRoute  = route('get.image.orig' , [$trueAlbum->hash, $image->hash], false);
-        $image->urlThumbRoute = route('get.image.thumb', [$trueAlbum->hash, $image->hash, $image->orient, 1080], false);
+        $image->urlOrigRoute  = route('image.orig' , [$trueAlbum->hash, $image->hash], false);
+        $image->urlThumbRoute = route('image.thumb', [$trueAlbum->hash, $image->hash, $image->orient, 1080], false);
 
         return view('app', compact('album', 'image'));
     }

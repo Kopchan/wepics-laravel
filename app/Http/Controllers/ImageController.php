@@ -541,6 +541,7 @@ class ImageController extends Controller
         $dirname = "thumbs/{$orientation}{$size}{$animated}";
         $thumbPath = "$dirname/$imageHash" . (!$animated ? '.webp' : '.mp4');
         if (!Storage::exists($thumbPath)) {
+            $thumbStartedAt = microtime(true);
             // Проверка запрашиваемого размера и редирект, если не прошло
             $askedSize = $size;
             $allowedSizes = config('setups.allowed_preview_sizes');
@@ -554,7 +555,7 @@ class ImageController extends Controller
             }
             if (!$allowSize) $size = $allowedSizes[count($allowedSizes)-1];
             if ($askedSize != $size)
-                return redirect()->route('get.image.thumb', [
+                return redirect()->route('image.thumb', [
                     $albumHash, $imageHash, $orientation, $size, $animated
                 ])->header('Cache-Control', ['max-age=86400', 'private']);
 
@@ -563,7 +564,7 @@ class ImageController extends Controller
             $type = $image->type;
 
             if ($animated && ($type !== 'imageAnimated' && $type !== 'video'))
-                return redirect()->route('get.image.thumb', [
+                return redirect()->route('image.thumb', [
                     $albumHash, $imageHash, $orientation, $size
                 ])->header('Cache-Control', ['max-age=86400', 'private']);
 
@@ -613,6 +614,8 @@ class ImageController extends Controller
                 unset($thumb);
             }
         }
+        if (isset($thumbStartedAt))
+            request()->attributes->set('thumb_ms', (int) round((microtime(true) - $thumbStartedAt) * 1000));
         else
         if ($animated && Storage::fileSize($thumbPath) < 1) {
             return response([
