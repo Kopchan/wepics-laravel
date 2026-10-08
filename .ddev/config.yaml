@@ -15,6 +15,10 @@ upload_dirs:
     - ../storage/app/thumbs
     - ../storage/app/og
     - ../node_modules
+    # Prod media bind (./media -> storage/app/images in docker-compose.yml):
+    # keep Mutagen from syncing all originals into its volume.
+    # Appended last so `ddev import-files` default destination stays unchanged.
+    - ../media
 webimage_extra_packages: [ffmpeg]
 use_dns_when_possible: true
 composer_version: "2"

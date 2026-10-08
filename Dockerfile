@@ -33,14 +33,7 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 
-# App code, exec deps code, unix rights managment
-COPY . .
-RUN composer dump-autoload --optimize \
-    && php artisan package:discover --ansi || true \
-    && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R 775 storage bootstrap/cache
-
-# Conditional Node + puppeteer for OG screenshots
+# Conditional Node + puppeteer dep (for OG screenshots)
 ARG WITH_NODE
 RUN if [ "$WITH_NODE" = "true" ]; then \
       curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
@@ -49,6 +42,13 @@ RUN if [ "$WITH_NODE" = "true" ]; then \
       && npm cache clean --force \
       && apt-get clean && rm -rf /var/lib/apt/lists/*; \
     fi
+
+# App code, exec deps code, unix rights managment
+COPY . .
+RUN composer dump-autoload --optimize \
+    && php artisan package:discover --ansi || true \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
 
 # Embed script executable and configs on starting docker image
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/99-wepics.ini
